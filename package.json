@@ -1,0 +1,12 @@
+{
+  "name": "pocket-ledger",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Track money by just saying it: plain-words entry, budgets and insights.",
+  "scripts": {
+    "build": "node build.js",
+    "test": "node tests/parser.test.js",
+    "test:e2e": "node tests/e2e.js",
+    "icons": "node tools/icons.js"
+  }
+}

@@ -1,0 +1,61 @@
+<title>Pocket Ledger</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Instrument+Sans:wght@400..700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/*STYLES*/
+</style>
+<div class="app" id="app">
+  <header class="top" id="top">
+    <div class="top-row">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="1" width="24" height="24" rx="7"/><path d="M6.5 9h9M6.5 13h9M6.5 17h6M18.5 7v12M20.5 7v12"/></svg>
+        <span class="brand-name">Pocket Ledger</span>
+      </div>
+      <div class="period" role="group" aria-label="Budget month">
+        <button class="icon-btn" id="prev-period" type="button" aria-label="Previous month"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <button class="period-label" id="period-label" type="button">…</button>
+        <button class="icon-btn" id="next-period" type="button" aria-label="Next month"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
+      </div>
+      <button class="icon-btn" id="open-settings" type="button" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17" r="2"/></svg></button>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button type="button" role="tab" data-tab="home" aria-selected="true">Home</button>
+      <button type="button" role="tab" data-tab="activity" aria-selected="false">Activity</button>
+      <button type="button" role="tab" data-tab="insights" aria-selected="false">Insights</button>
+      <button type="button" role="tab" data-tab="budgets" aria-selected="false">Budgets</button>
+    </nav>
+  </header>
+  <div id="banner"></div>
+  <main id="view" class="view" tabindex="-1">
+    <section class="loading" aria-busy="true">
+      <p class="eyebrow">Opening your ledger</p>
+      <div class="ghost-num"></div>
+      <div class="ghost-bar"></div>
+      <p>Your entries, budgets and insights will appear here. To add one, type something like <b>coffee 120</b> below.</p>
+    </section>
+  </main>
+</div>
+<div class="dock" id="dock">
+  <div class="dock-in">
+    <div class="coach" id="coach" role="status" hidden></div>
+    <div class="slips" id="slips" aria-live="polite" hidden></div>
+    <form class="capture" id="capture" autocomplete="off">
+      <button type="button" class="dock-btn" id="add-btn" aria-label="More ways to add"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+      <label class="sr" for="entry">Add an entry</label>
+      <textarea id="entry" rows="1" placeholder="Coffee 120 · Uber 230 yesterday" enterkeyhint="send" autocapitalize="sentences" spellcheck="false"></textarea>
+      <button type="button" class="dock-btn" id="mic-btn" aria-label="Speak an entry"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+      <button type="submit" class="dock-btn primary" id="send-btn" aria-label="Add entry" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+    </form>
+  </div>
+</div>
+<div id="toast-root" class="toast-root" aria-live="polite"></div>
+<div id="sheet-root" hidden></div>
+<div id="tip" class="tip" role="tooltip" hidden></div>
+<input type="file" id="file-img" accept="image/*" hidden>
+<input type="file" id="file-csv" accept=".csv,.txt,text/csv,text/plain" hidden>
+<input type="file" id="file-json" accept=".json,application/json" hidden>
+<script>
+/*SCRIPT*/
+</script>
