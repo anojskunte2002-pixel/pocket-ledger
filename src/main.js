@@ -85,6 +85,12 @@ const ACT = {
   },
   'ed-for': a => { if (!ED) return; ED.d.who = a; ED.whoTouched = true; $('#ed-people').innerHTML = edPeopleHTML(ED.d); },
   settle: () => openSettle(),
+  'with-shared': () => { UI.withShared = !UI.withShared; uiFlag('with-shared', UI.withShared); if (UI.mounted === 'activity') updateActivity(); render(); },
+  flow: a => openFlowSheet(a || 'all'),
+  fair: a => openFairSheet(a),
+  'balance-edit': a => openBalanceEditor(a),
+  'balance-save': () => balanceSave(),
+  'balance-remove': () => balanceRemove(),
   'settle-save': () => settleSave(),
   'hh-mode': a => { if (!HH) return; HH.mode = a; if (a === 'custom' && !(HH.split > 0)) HH.split = 0.5; renderHousehold(); },
   'hh-cat': (a, t) => { if (!HH) return; if (HH.cats.has(a)) HH.cats.delete(a); else HH.cats.add(a); t.setAttribute('aria-pressed', String(HH.cats.has(a))); },
@@ -284,8 +290,8 @@ function bindChrome() {
         if (!Store.ready) return;
         cancelAnimationFrame(raf);
         raf = requestAnimationFrame(() => {
-          if (UI.mounted === 'insights') drawCharts(analyze(UI.period, UI.person));
-          for (const el of $$('#view .chart[data-chart="flow"]')) flowChart(el, analyze(UI.period, 'all'));
+          if (UI.mounted === 'insights') drawCharts(analyze(UI.period, viewKey()));
+          for (const el of $$('#view .chart[data-chart="flow"]')) flowChart(el, analyze(UI.period, el.dataset.view && el.dataset.view !== 'all' ? el.dataset.view + 's' : 'all'));
           refractNow();
         });
       }

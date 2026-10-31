@@ -130,11 +130,22 @@ async function closeBar(page) { await page.evaluate(() => { const e = document.g
       // one person's view: her own spending plus her half of shared costs
       await closeBar(page);
       await page.click('#people [data-arg="p2"]');
-      await page.waitForFunction(() => { const h = document.querySelector('.hero-num'); return h && h.dataset.count === '640'; }, null, { timeout: 4000 }).catch(() => {});
+      await page.waitForSelector('.flow', { timeout: 4000 });
       const heroTo = () => page.$eval('.hero-num', e => e.dataset.count);
-      ok((await page.textContent('.hero')).includes('Meera') && (await heroTo()) === '640', 'Meera’s spending is her half of the shared costs (₹640): ' + (await heroTo()));
-      ok((await page.textContent('.story')).includes('Share of shared costs'), 'her money story splits own spending from her share');
+      ok((await heroTo()) === '-1050', 'Meera’s money shows what actually left her account: −₹1,050 (' + (await heroTo()) + ')');
+      const flowTxt = async () => (await page.textContent('.flow')).replace(/\s+/g, ' ');
+      ok(/Paid for both of you.*− ₹1,050/.test(await flowTxt()) && /Own spending.*₹0/.test(await flowTxt()), 'shared costs she paid count in full, not halved: ' + (await flowTxt()).slice(0, 160));
+      ok((await page.$$('#view .row')).length === 0, 'her page lists only her own entries by default');
+      await page.click('[data-act="with-shared"]');
+      await page.waitForFunction(() => document.querySelectorAll('#view .row').length > 0, null, { timeout: 4000 }).catch(() => {});
+      ok((await page.$$('#view .row')).length >= 3, 'the shared costs appear only when asked for');
+      await page.click('[data-act="with-shared"]');
+      await page.waitForFunction(() => document.querySelectorAll('#view .row').length === 0, null, { timeout: 4000 }).catch(() => {});
       ok((await page.textContent('.settle')).includes('Ravi owes Meera') && (await page.textContent('.settle')).includes('410'), 'balance: Ravi owes Meera ₹410: ' + (await page.textContent('.settle')).trim());
+      await page.click('.fair-head');
+      await page.waitForSelector('.sheet .bd-row');
+      ok((await page.$$('.sheet .bd-row')).length === 3 && (await page.textContent('.sheet')).includes('Meera’s part (50%)'), 'the fair split shows each shared cost and her part');
+      await page.keyboard.press('Escape');
       await shot(page, '04-person');
       await page.click('.settle [data-act="settle"]');
       await page.waitForSelector('#settle-amt');
@@ -144,7 +155,16 @@ async function closeBar(page) { await page.evaluate(() => { const e = document.g
       ok(!!(await page.$('.settle.ok')), 'after settling up they are all square');
       const st = await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (/v1:ledger:/.test(k)) for (const e of Object.values(JSON.parse(localStorage[k]).entries)) if (e.cat === 'settle') return e; return null; });
       ok(st && st.paid === 'p1' && st.who === 'p2' && st.amount === 410, 'the settle-up is stored as Ravi paying Meera back');
-      ok((await heroTo()) === '640', 'settling up is not counted as spending');
+      ok(/Settled up.*\+ ₹410/.test(await flowTxt()) && (await heroTo()) === '-640', 'the repayment lands in her account, not in spending (' + (await heroTo()) + ')');
+      await page.click('.hero [data-act="balance-edit"]');
+      await page.fill('#bal-amt', '50000');
+      await page.click('[data-act="balance-save"]');
+      await page.waitForFunction(() => { const h = document.querySelector('.hero-num'); return h && h.dataset.count === '49360'; }, null, { timeout: 4000 }).catch(() => {});
+      ok((await heroTo()) === '49360', 'with a starting balance of ₹50,000 her bank shows ₹49,360 (' + (await heroTo()) + ')');
+      await page.click('.mf-row.total');
+      await page.waitForSelector('.sheet .bd-sum');
+      ok(/Started with.*₹50,000/.test((await page.textContent('.sheet')).replace(/\s+/g, ' ')) && (await page.textContent('.sheet')).includes('In the bank now'), 'tapping the balance shows the whole calculation');
+      await page.keyboard.press('Escape');
       await page.click('#people [data-arg="all"]');
       // plan the month
       await page.click('[data-tab="plan"]');
@@ -341,7 +361,7 @@ async function closeBar(page) { await page.evaluate(() => { const e = document.g
       ok((await page.evaluate(() => window.__aiCalls)) === 1, 'clear entries are parsed locally without Claude');
       await page.click('.row >> text=Coffee');
       await page.click('[data-act="ed-delete"]');
-      await page.waitForTimeout(250);
+      await page.waitForFunction(() => !Array.from(document.querySelectorAll('.row')).some(r => /Coffee/.test(r.textContent)), null, { timeout: 4000 }).catch(() => {});
       ok(!(await page.$('.row >> text=Coffee')), 'deleted entry disappears');
       await page.click('#toast-root button >> text=Undo');
       await page.waitForSelector('.row >> text=Coffee', { timeout: 3000 }).catch(() => {});

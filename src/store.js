@@ -1,7 +1,7 @@
 /* ===================== store: private cloud (db capability) or this device ===================== */
 const LS_PREFIX = 'pocketledger:v1:';
 const BUCKET_LIMIT = 200000;      // bytes; a month document stays below the 256 KiB cap
-const META_NAMES = ['settings', 'budgets', 'categories', 'rules', 'recurring', 'household', 'plan'];
+const META_NAMES = ['settings', 'budgets', 'categories', 'rules', 'recurring', 'household', 'plan', 'balances'];
 
 const Store = {
   mode: 'loading',                 // cloud | device | memory
@@ -11,7 +11,7 @@ const Store = {
   isOwner: true,
   buckets: new Map(),              // bucketId → { entries: { id: doc | null } }
   sizes: new Map(),
-  meta: { settings: null, budgets: null, categories: null, rules: null, recurring: null, household: null, plan: null },
+  meta: { settings: null, budgets: null, categories: null, rules: null, recurring: null, household: null, plan: null, balances: null },
   metaPending: {},
   entries: new Map(),
   where: new Map(),
@@ -295,7 +295,7 @@ async function wipeAll() {
     for (const k of lsKeys()) lsDel(k);
   }
   Store.buckets = new Map(); Store.sizes = new Map(); Store.pending.clear(); Store.metaPending = {};
-  Store.meta = { settings: null, budgets: null, categories: null, rules: null, recurring: null, household: null, plan: null };
+  Store.meta = { settings: null, budgets: null, categories: null, rules: null, recurring: null, household: null, plan: null, balances: null };
   Store.metaLoaded = Store.mode !== 'cloud';
   rebuildEntries(); storeEmit();
 }

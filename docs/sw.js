@@ -1,6 +1,6 @@
 /* Offline support for the website version. The page itself always tries the network first,
    so a new version shows up on the next visit; everything else is served from the cache. */
-const VERSION = 'pl-1694ce777cbd';
+const VERSION = 'pl-670bd84559b2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/favicon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 
 self.addEventListener('install', event => {

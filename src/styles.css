@@ -782,3 +782,54 @@ b.neg, .neg { color: var(--bad); }
 .gr-top span { font-weight: 600; font-variant-numeric: tabular-nums; }
 .gr-main small { font-size: 12px; color: var(--ink-3); }
 #ed-split { display: block; margin-top: 6px; }
+
+/* ---------- one person's money: bank balance, where it went, the fair split ---------- */
+.as-btn { display: block; border: 0; background: none; color: inherit; padding: 0; text-align: left; font: inherit; cursor: pointer; }
+.hero .hero-num.as-btn { font-weight: 600; font-size: clamp(42px, 12.4vw, 64px); letter-spacing: -.055em; line-height: 1; margin: 10px 0 8px; }
+.bank-ahead { display: flex; gap: 8px; align-items: flex-start; margin: 12px 0 0; padding: 10px 12px; border-radius: 14px; background: var(--fill); font-size: 13px; color: var(--ink-2); }
+.bank-ahead .ic svg { width: 16px; height: 16px; }
+.view-toggle { margin-top: 10px; background: var(--glass); -webkit-backdrop-filter: var(--bdf); backdrop-filter: var(--bdf); text-shadow: none; }
+.view-toggle[aria-pressed="true"] { background: var(--ink); color: var(--inv); }
+.flow { margin-top: 12px; display: grid; }
+.flow-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 4px; }
+.flow-head .eyebrow { margin: 0; }
+.mf-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 14px; gap: 10px; align-items: center; width: 100%; padding: 10px 0; border: 0; border-bottom: 1px solid var(--hair); background: none; color: inherit; text-align: left; font: inherit; }
+.mf-row:not(.tap) { grid-template-columns: minmax(0, 1fr) auto; }
+.mf-row > span { display: grid; font-size: 14.5px; font-weight: 550; min-width: 0; }
+.mf-row small { font-size: 12px; color: var(--ink-3); font-weight: 500; }
+.mf-row b { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mf-row b.in { color: var(--good); }
+.mf-row .ic svg { width: 14px; height: 14px; transform: rotate(90deg); color: var(--ink-4); }
+.mf-row.tap:hover { background: var(--fill); }
+.mf-row.note b { color: var(--ink-3); font-weight: 550; }
+.mf-row.total { border-bottom: 0; padding-top: 13px; }
+.mf-row.total > span { font-size: 15.5px; font-weight: 650; }
+.mf-row.total b { font-size: 22px; letter-spacing: -.03em; }
+.fair { margin-top: 12px; display: grid; gap: 10px; }
+.fair-head { display: grid; grid-template-columns: auto minmax(0, 1fr) 14px; gap: 12px; align-items: center; border: 0; background: none; padding: 0; color: inherit; text-align: left; font: inherit; }
+.fair-head > span:nth-child(2) { display: grid; min-width: 0; }
+.fair-head b { font-size: 16px; font-weight: 600; }
+.fair-head small { font-size: 12.5px; color: var(--ink-3); }
+.fair-head .ic svg { width: 14px; height: 14px; transform: rotate(90deg); color: var(--ink-4); }
+.fair-note { margin: 0; font-size: 13px; color: var(--ink-2); }
+.pc-bank { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 8px 10px; border-radius: 12px; background: var(--fill); }
+.pc-bank small { font-size: 12px; color: var(--ink-3); font-weight: 550; }
+.pc-bank b { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.bd-list { display: grid; margin-top: 12px; border-radius: 16px; background: var(--fill); overflow: hidden; }
+.bd-list > * + * { border-top: 1px solid var(--hair); }
+.bd-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 12px; border: 0; background: none; color: inherit; text-align: left; font: inherit; width: 100%; }
+.bd-row:hover { background: var(--fill); }
+.bd-main { display: grid; min-width: 0; }
+.bd-main b { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.bd-main small { font-size: 12px; color: var(--ink-3); }
+.bd-amt { display: grid; justify-items: end; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bd-amt small { font-size: 11px; color: var(--ink-3); font-weight: 500; }
+.bd-sum { display: grid; margin-top: 14px; }
+.bd-line { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 2px; border: 0; border-bottom: 1px solid var(--hair); background: none; color: inherit; text-align: left; font: inherit; width: 100%; }
+.bd-line span { font-size: 14px; }
+.bd-line small { font-size: 12px; color: var(--ink-3); }
+.bd-line b { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bd-line.tap:hover { background: var(--fill); }
+.bd-line.total { border-bottom: 0; }
+.bd-line.total span { font-weight: 650; }
+.bd-line.total b { font-size: 18px; }

@@ -877,3 +877,77 @@ async function settleSave() {
   closeSheet();
   await recordSettle(Math.min(v, b.amount * 1.5), b.from, b.to);
 }
+
+/* ---------- the working behind each number on a person's page ---------- */
+function bdRowsHTML(list, amt, sub) {
+  return '<div class="bd-list">' + list.map(e => '<button type="button" class="bd-row" data-act="edit" data-arg="' + esc(e.id) + '"><span class="bd-main"><b>' + esc(e.note) + '</b><small>' + esc(sub(e)) + '</small></span><span class="bd-amt">' + amt(e) + '</span></button>').join('') + '</div>';
+}
+function flowSub(e) { return [dayLabel(e.date), catById(e.cat, e.type).name, household().solo ? '' : peopleText(e), e.method].filter(Boolean).join(' · '); }
+function openFlowSheet(kind) {
+  const w = UI.person;
+  if (w !== 'p1' && w !== 'p2') return;
+  const A = analyze(UI.period, viewKey()), { F, bk } = flowFor(A), nm = memberName(w);
+  const signed = v => (v > 0 ? '+ ' : v < 0 ? '− ' : '') + esc(moneyR(Math.abs(v)));
+  const moveTxt = e => { const m = bankMove(e, w); return m.held != null ? esc(moneyR(m.held)) : signed(m.amt); };
+  let title, h;
+  if (kind === 'all') {
+    title = bk ? nm + '’s balance, worked out' : nm + '’s money ' + (A.isCurrent ? 'this ' + cycleWord() : 'in ' + periodLabel(A.p));
+    h = '<p class="sh-lede">' + (bk ? 'The starting balance, plus every rupee that came in, minus every rupee that left ' + esc(nm) + '’s account since ' + esc(shortDate(bk.date)) + '. Shared costs count in full for whoever paid them; the fair split only decides who owes whom.' : 'Every rupee that came in, minus every rupee that left ' + esc(nm) + '’s account. Set a starting balance to turn this into an exact bank balance.') + '</p><div class="bd-sum">';
+    if (bk) h += '<div class="bd-line"><span>Started with, ' + esc(shortDate(bk.date)) + '</span><b>' + esc(moneyR(bk.opening)) + '</b></div>';
+    for (const [k, label] of FLOW_ROWS) if (F[k]) h += '<button type="button" class="bd-line tap" data-act="flow" data-arg="' + k + '"><span>' + label + ' <small>' + plural(F.items[k].length, 'entry', 'entries') + '</small></span><b>' + signed(F[k]) + '</b></button>';
+    h += '<div class="bd-line total"><span>' + (bk ? 'In the bank now' : 'Net change') + '</span><b>' + (bk ? esc(moneyR(bk.now)) : signed(F.net)) + '</b></div></div>';
+    if (F.card || F.cash) h += '<p class="cc-sub" style="margin-top:12px">Not counted above: ' + [F.card ? esc(moneyR(F.card)) + ' on credit card (it leaves the bank when the card bill is paid)' : '', F.cash ? esc(moneyR(F.cash)) + ' paid in cash' : ''].filter(Boolean).join(' and ') + '.</p>';
+    if (F.upItems.length) h += '<p class="lbl-s" style="margin-top:18px">Coming up, not counted yet</p>' + bdRowsHTML(F.upItems, moveTxt, flowSub);
+  } else {
+    const label = (FLOW_ROWS.find(r => r[0] === kind) || [kind, kind === 'card' ? 'On credit card' : 'Paid in cash'])[1];
+    const list = F.items[kind] || [];
+    title = label;
+    const why = { in: 'Income that landed in ' + nm + '’s account.', own: nm + '’s own spending, paid by ' + nm + '.', shared: 'Things for both of you that ' + nm + ' paid. The whole amount left ' + nm + '’s account; the fair split is worked out separately.', other: 'Things ' + nm + ' paid for the other person. They owe it back.', invest: 'Money moved into investments.', transfer: 'Card bills, cash withdrawals and money moved out. Not spending, but it leaves the account.', settle: 'Money paid back or received when settling up.', card: 'Bought on a credit card. It leaves the bank later, through the card bill payment.', cash: 'Paid from cash in hand, which was already counted when it was withdrawn.' }[kind] || '';
+    h = '<p class="sh-lede">' + esc(why) + '</p>' + (list.length ? bdRowsHTML(list, moveTxt, flowSub) : '<p class="muted" style="margin-top:12px">Nothing here yet.</p>') +
+      '<div class="bd-line total"><span>Total</span><b>' + (kind === 'card' || kind === 'cash' ? esc(moneyR(F[kind])) : signed(F[kind])) + '</b></div>';
+  }
+  openSheet(sheetHead(title) + '<div class="sh-body">' + h + '</div>' + (kind === 'all' ? '' : '<footer class="sh-foot"><button type="button" class="btn" data-act="flow" data-arg="all">Whole calculation</button><span class="spacer"></span></footer>'), { label: title });
+}
+function openFairSheet(w) {
+  if (w !== 'p1' && w !== 'p2') w = meId();
+  const A = analyze(UI.period, w), other = w === 'p1' ? 'p2' : 'p1', r = A.ratio, part = w === 'p1' ? r : 1 - r, nm = memberName(w);
+  const items = A.sharedItems, total = sum(items, e => e.amount), mine = total * part, paid = A.paidBy[w];
+  let h = '<p class="sh-lede">Each shared cost is split ' + splitLabel() + '. ' + esc(nm) + '’s part is what ' + esc(nm) + ' used; who paid shows whose account the money left. The difference is what one of you owes the other.</p>';
+  h += items.length ? bdRowsHTML(items, e => esc(moneyR(e.amount * part)) + '<small>of ' + esc(moneyR(e.amount)) + '</small>', e => dayLabel(e.date) + ' · ' + memberName(payerOf(e)) + ' paid ' + moneyR(e.amount)) : '<p class="muted" style="margin-top:12px">Nothing shared in ' + esc(periodLabel(A.p)) + ' yet.</p>';
+  h += '<div class="bd-sum"><div class="bd-line"><span>Shared this ' + cycleWord() + '</span><b>' + esc(moneyR(total)) + '</b></div>' +
+    '<div class="bd-line"><span>' + esc(nm) + '’s part (' + pct(part) + ')</span><b>' + esc(moneyR(mine)) + '</b></div>' +
+    '<div class="bd-line"><span>' + esc(nm) + ' paid</span><b>' + esc(moneyR(paid)) + '</b></div>' +
+    '<div class="bd-line total"><span>' + (paid >= mine ? esc(memberName(other)) + ' owes ' + esc(nm) : esc(nm) + ' owes ' + esc(memberName(other))) + ' for this ' + cycleWord() + '</span><b>' + esc(moneyR(Math.abs(paid - mine))) + '</b></div></div>' +
+    '<p class="cc-sub" style="margin-top:12px">Things one of you paid for the other alone also count, and settling up clears it. Across everything logged:</p>' + settleLine(w);
+  openSheet(sheetHead('Shared costs, split fairly') + '<div class="sh-body">' + h + '</div>', { label: 'Shared costs, split fairly' });
+}
+
+/* ---------- a starting balance: what was in the bank on a given day ---------- */
+let BAL_W = 'p1';
+function openBalanceEditor(w) {
+  BAL_W = w === 'p2' ? 'p2' : 'p1';
+  const nm = memberName(BAL_W), cur = balances()[BAL_W], start = periodFromKey(currentKey(), settings().startDay).start;
+  openSheet(sheetHead(nm + '’s starting balance') + '<div class="sh-body"><p class="sh-lede">What was in ' + esc(nm) + '’s bank account at the start of a day. From then on every entry ' + esc(nm) + ' pays or receives keeps the balance exact. Setting it on salary day each ' + cycleWord() + ' keeps it honest.</p>' +
+    '<label class="amt-field"><span class="cur" aria-hidden="true">' + esc(curSymbol()) + '</span><span class="sr">Starting balance</span><input id="bal-amt" inputmode="decimal" autocomplete="off" placeholder="0" value="' + (cur ? esc(String(cur.amount)) : '') + '" autofocus></label>' +
+    '<label class="field"><span>On the morning of</span><input type="date" id="bal-date" value="' + esc(cur ? cur.date : start) + '" max="' + esc(todayStr()) + '"><small>Entries from this day on are counted.</small></label></div>' +
+    '<footer class="sh-foot">' + (cur ? '<button type="button" class="btn ghost danger" data-act="balance-remove">Remove</button>' : '') + '<span class="spacer"></span><button type="button" class="btn" data-act="close-sheet">Cancel</button><button type="button" class="btn primary" data-act="balance-save">Save</button></footer>', {
+    label: 'Starting balance', onMount: sh => $('#bal-amt', sh).addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); balanceSave(); } })
+  });
+}
+function balancesRaw() { const b = Object.assign({}, Store.meta.balances || {}); delete b.rev; return b; }
+async function balanceSave() {
+  const raw = String($('#bal-amt').value || '').trim(), v = raw === '' ? NaN : (/^-/.test(raw) ? -evalAmount(raw.slice(1)) : evalAmount(raw) || (/^0+(\.0+)?$/.test(raw) ? 0 : NaN));
+  const d = $('#bal-date').value;
+  if (!Number.isFinite(v)) { $('#bal-amt').focus(); return; }
+  if (!isYMD(d) || d > todayStr()) { $('#bal-date').focus(); return; }
+  const b = balancesRaw();
+  b[BAL_W] = { amount: round2(v), date: d };
+  closeSheet();
+  try { await putMeta('balances', b); toast(memberName(BAL_W) + '’s starting balance saved'); } catch (e) { toast(storeErrorText(e)); }
+}
+async function balanceRemove() {
+  const b = balancesRaw();
+  delete b[BAL_W];
+  closeSheet();
+  try { await putMeta('balances', b); toast('Starting balance removed'); } catch (e) { toast(storeErrorText(e)); }
+}
