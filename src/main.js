@@ -37,14 +37,14 @@ const ACT = {
   'plan-edit': a => openPlanEditor('', a),
   'plan-new': a => openPlanEditor(a === 'income' ? 'income' : 'fixed'),
   'plan-new-fixed': () => openPlanEditor('fixed'),
-  'plan-quick': a => { const p = String(a).split(':'); openPlanEditor(p[0] === 'income' ? 'income' : 'fixed', '', { cat: p[1] || '', name: p.slice(2).join(':') }); },
+  'plan-quick': a => { const p = String(a).split(':'), who = /^(p1|p2|joint)$/.test(p[3] || '') ? p[3] : ''; openPlanEditor(p[0] === 'income' ? 'income' : 'fixed', '', Object.assign({ cat: p[1] || '', name: p[2] || '' }, who ? { who } : {})); },
   'plan-goal': () => openGoalEditor(),
   'plan-suggest': () => openPlanSuggest(),
   'pe-cat': a => {
     if (!PE) return;
     PE.d.cat = a;
     setPicked('#pe-cats .cat-opt', a, 'aria-pressed');
-    if (!PE.whoTouched && PE.d.kind === 'fixed' && !household().solo) { PE.d.who = SHARED_CATS.has(a) ? 'joint' : meId(); setPicked('[data-act="pe-who"]', PE.d.who); }
+    if (!PE.whoTouched && PE.d.kind === 'fixed' && !household().solo) { PE.d.who = isSharedCat(a) ? 'joint' : meId(); setPicked('[data-act="pe-who"]', PE.d.who); }
     const n = $('#pe-name'); if (n && !n.value.trim()) n.placeholder = catById(a).name;
   },
   'pe-who': a => { if (!PE) return; PE.d.who = a; PE.whoTouched = true; setPicked('[data-act="pe-who"]', a); },
@@ -56,19 +56,38 @@ const ACT = {
     try { await removePlanItem(d.id); } catch (e) { toast(storeErrorText(e)); return; }
     toast('Removed ' + d.name + ' from the plan', [{ label: 'Undo', run: () => upsertPlanItem(d).catch(err => toast(storeErrorText(err))) }], 6500);
   },
-  'goal-pick': a => { const i = $('#goal-amt'); if (i) { i.value = a; i.focus(); } },
+  'goal-pick': a => { const [w, v] = String(a).split(':'); const i = $('#goal-' + w); if (i) { i.value = v; i.focus(); } },
   'goal-save': () => goalSave(),
-  'goal-remove': async () => { closeSheet(); try { await setPlanSave(0); toast('Saving goal removed'); } catch (e) { toast(storeErrorText(e)); } },
+  'goal-remove': async () => { closeSheet(); try { await setPlanSave({ p1: 0, p2: 0 }); toast('Saving goals removed'); } catch (e) { toast(storeErrorText(e)); } },
   'ps-apply': () => planSuggestApply(),
-  'slip-who': a => {
+  'slip-paid': a => {
     const i = +a, d = currentSlip(i);
     if (!d) return;
-    const order = ['p1', 'p2', 'joint'], next = order[(order.indexOf(draftWho(d)) + 1) % 3];
-    UI.slipOver[i] = Object.assign({}, UI.slipOver[i], { who: next });
+    const pp = entryPeople(d);
+    UI.slipOver[i] = Object.assign({}, UI.slipOver[i], { paid: pp.paid === 'p1' ? 'p2' : 'p1' });
     renderSlips();
     $('#entry').focus();
   },
-  'ed-who': a => { if (!ED) return; ED.d.who = a; ED.whoTouched = true; setPicked('[data-act="ed-who"]', a); },
+  'slip-for': a => {
+    const i = +a, d = currentSlip(i);
+    if (!d) return;
+    const pp = entryPeople(d), other = pp.paid === 'p1' ? 'p2' : 'p1';
+    const order = d.type === 'income' ? ['p1', 'p2', 'joint'] : [pp.paid, 'joint', other];
+    UI.slipOver[i] = Object.assign({}, UI.slipOver[i], { who: order[(order.indexOf(pp.who) + 1) % 3] });
+    renderSlips();
+    $('#entry').focus();
+  },
+  'ed-paid': a => {
+    if (!ED) return;
+    ED.d.paid = a;
+    if (!ED.whoTouched && ED.isNew && ED.d.who !== 'joint') ED.d.who = defaultWhoFor(ED.d.cat, a);
+    $('#ed-people').innerHTML = edPeopleHTML(ED.d);
+  },
+  'ed-for': a => { if (!ED) return; ED.d.who = a; ED.whoTouched = true; $('#ed-people').innerHTML = edPeopleHTML(ED.d); },
+  settle: () => openSettle(),
+  'settle-save': () => settleSave(),
+  'hh-mode': a => { if (!HH) return; HH.mode = a; if (a === 'custom' && !(HH.split > 0)) HH.split = 0.5; renderHousehold(); },
+  'hh-cat': (a, t) => { if (!HH) return; if (HH.cats.has(a)) HH.cats.delete(a); else HH.cats.add(a); t.setAttribute('aria-pressed', String(HH.cats.has(a))); },
   'slip-cat': a => {
     const i = +a, d = currentSlip(i);
     if (!d) return;
@@ -99,12 +118,14 @@ const ACT = {
     if (ED.d.cat && catById(ED.d.cat, a).type !== a) ED.d.cat = '';
     for (const b of $$('[data-act="ed-type"]')) b.setAttribute('aria-checked', String(b.dataset.arg === a));
     $('#ed-cats').innerHTML = catGridHTML(a, ED.d.cat);
+    if (!ED.whoTouched) ED.d.who = a === 'income' ? ED.d.paid : defaultWhoFor(ED.d.cat, ED.d.paid);
+    $('#ed-people').innerHTML = edPeopleHTML(ED.d);
   },
   'ed-cat': a => {
     if (!ED) return;
     ED.d.cat = a; ED.catTouched = true;
     setPicked('#ed-cats .cat-opt', a, 'aria-pressed');
-    if (ED.isNew && !ED.whoTouched && !household().solo) { ED.d.who = defaultWhoFor(a); setPicked('[data-act="ed-who"]', ED.d.who); }
+    if (ED.isNew && !ED.whoTouched && !household().solo) { ED.d.who = defaultWhoFor(a, ED.d.paid); $('#ed-people').innerHTML = edPeopleHTML(ED.d); }
   },
   'ed-method': a => { if (!ED) return; ED.d.method = ED.d.method === a ? '' : a; for (const b of $$('#ed-methods .chip-btn')) b.setAttribute('aria-pressed', String(b.dataset.arg === ED.d.method)); },
   'ed-repeat': a => { if (!ED) return; ED.d.repeat = a; for (const b of $$('#ed-repeat .chip-btn')) b.setAttribute('aria-pressed', String(b.dataset.arg === a)); },

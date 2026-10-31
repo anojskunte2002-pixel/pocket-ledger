@@ -96,12 +96,12 @@ function renderHeader() {
   const lab = $('#period-label');
   const labH = '<span class="pl-long">' + esc(periodLabel(p)) + '</span><span class="pl-short">' + esc(periodShortLabel(p)) + '</span>';
   if (lab.innerHTML !== labH) lab.innerHTML = labH;
-  lab.setAttribute('aria-label', UI.period === cur ? 'Showing ' + periodLabel(p) : 'Showing ' + periodLabel(p) + '. Go back to this month');
+  lab.setAttribute('aria-label', UI.period === cur ? 'Showing ' + periodLabel(p) : 'Showing ' + periodLabel(p) + '. Go back to this ' + cycleWord());
   $('#next-period').disabled = UI.period >= cur;
   const ppl = $('#people');
   ppl.hidden = h.solo;
   if (!h.solo) {
-    const opts = [['all', 'Everyone'], ['p1', h.members[0].name], ['p2', h.members[1].name], ['joint', 'Shared']];
+    const opts = [['all', 'Overall'], ['p1', h.members[0].name], ['p2', h.members[1].name], ['joint', 'Shared']];
     const sig = opts.map(o => o[1]).join('|');
     if (ppl.dataset.sig !== sig) {
       ppl.innerHTML = '<span class="seg-thumb" aria-hidden="true"></span>' + opts.map(o => '<button type="button" role="radio" data-act="person" data-arg="' + o[0] + '">' + (o[0] === 'all' ? '' : avatarHTML(o[0], 'xs')) + '<span>' + esc(o[1]) + '</span></button>').join('');
@@ -164,7 +164,7 @@ function renderView() {
   refractNow();
 }
 function afterRender() {
-  for (const el of $$('#view .chart[data-chart="flow"]')) flowChart(el, analyze(UI.period, 'all'));
+  for (const el of $$('#view .chart[data-chart="flow"]')) flowChart(el, analyze(UI.period, el.dataset.view || 'all'));
   animateRings();
   runCountUps();
 }
@@ -219,17 +219,31 @@ function animateRings() {
 }
 
 /* ---------- rows ---------- */
+/* who paid and who it was for, in a few words */
+function peopleText(e) {
+  if (household().solo) return '';
+  const w = whoOf(e);
+  if (e.cat === 'settle') return memberName(payerOf(e)) + ' paid ' + memberName(w) + ' back';
+  if (e.type === 'income') return w === 'joint' ? 'Shared income' : memberName(w);
+  const pay = payerOf(e);
+  if (w === 'joint') return memberName(pay) + ' paid · shared';
+  if (w === pay) return memberName(w);
+  return memberName(pay) + ' paid for ' + memberName(w);
+}
 function rowHTML(e) {
   const c = catById(e.cat, e.type), k = kindOf(e), solo = household().solo, w = whoOf(e);
+  const full = e.full != null ? e.full : e.amount;
+  const view = UI.person === 'p1' || UI.person === 'p2' ? UI.person : '';
+  const part = e.part != null ? e.part : (view && !solo ? shareOf(e, view, shareRatio()) : 1);
   const metaBits = [c.name];
-  if (!solo) metaBits.push(memberName(w));
+  if (!solo) metaBits.push(peopleText(e));
   if (e.merchant && e.note.toLowerCase().indexOf(e.merchant.toLowerCase()) < 0) metaBits.push(e.merchant);
   if (e.method) metaBits.push(e.method);
   if (e.rec || e.plan) metaBits.push('planned');
   if (e.tags.length) metaBits.push('#' + e.tags.join(' #'));
-  const by = !solo && e.by && e.by !== w ? '<span class="by">added by ' + esc(memberName(e.by)) + '</span>' : '';
-  const amt = e.type === 'income' ? money(e.amount, { sign: true }) : money(e.amount);
-  const sub = k === 'transfer' ? '<small>not spending</small>' : k === 'invest' ? '<small>saved</small>' : '';
+  const by = !solo && e.by && e.by !== payerOf(e) && e.type !== 'income' ? '<span class="by">added by ' + esc(memberName(e.by)) + '</span>' : '';
+  const amt = e.type === 'income' ? money(full, { sign: true }) : money(full);
+  const sub = view && part > 0 && part < 1 ? '<small>' + esc(memberName(view)) + '’s share ' + esc(moneyR(full * part)) + '</small>' : k === 'transfer' ? '<small>' + (e.cat === 'settle' ? 'settling up' : 'not spending') + '</small>' : k === 'invest' ? '<small>saved</small>' : '';
   return '<button type="button" class="row ' + e.type + ' k-' + k + (UI.flash.has(e.id) ? ' flash' : '') + '" data-act="edit" data-arg="' + esc(e.id) + '">' +
     '<span class="badge" aria-hidden="true">' + esc(c.emoji) + (solo ? '' : '<span class="who-dot ' + w + '"></span>') + '</span>' +
     '<span class="row-main"><span class="row-title">' + esc(e.note) + '</span><span class="row-meta">' + esc(metaBits.join(' · ')) + by + '</span></span>' +
@@ -265,9 +279,9 @@ function greetHTML(A) {
   const h = household();
   const name = h.setup ? memberName(meId()) : '';
   let sub;
-  if (A.isCurrent) sub = fmtDate(todayStr(), { weekday: 'long', day: 'numeric', month: 'long' }) + ' · ' + (A.daysLeft === 0 ? 'last day of the month' : plural(A.daysLeft, 'day') + ' left this month');
+  if (A.isCurrent) sub = fmtDate(todayStr(), { weekday: 'long', day: 'numeric', month: 'long' }) + ' · ' + (A.daysLeft === 0 ? 'last day of the ' + cycleWord() : plural(A.daysLeft, 'day') + ' left this ' + cycleWord());
   else sub = 'Looking back at ' + periodLabel(A.p);
-  if (UI.person !== 'all') sub = 'Showing ' + (UI.person === 'joint' ? 'shared money' : memberName(UI.person) + '’s own money') + ' · ' + sub;
+  if (UI.person !== 'all') sub = 'Showing ' + (UI.person === 'joint' ? 'shared money' : memberName(UI.person) + '’s side: own spending plus their share') + ' · ' + sub;
   return '<section class="greet"><h1>' + part + (name ? ', <em>' + esc(name) + '</em>' : '') + '</h1><p>' + esc(sub) + '</p></section>';
 }
 function welcomeHTML() {
@@ -293,12 +307,15 @@ function welcomeHTML() {
 }
 function homeHTML() {
   if (!Store.entries.size && !getPlan().exists) return welcomeHTML();
-  const A = analyze(UI.period, UI.person);
+  const A = analyze(UI.period, UI.person), two = !household().solo;
   let h = greetHTML(A);
-  if (UI.person !== 'all') h += personHeroHTML(A);
-  else h += A.plan ? planHeroHTML(A) : spendHeroHTML(A);
-  if (UI.person === 'all' && !household().solo) h += splitHTML(A);
-  if (UI.person === 'all' && A.plan && A.plan.fixed.length) h += billsStripHTML(A);
+  // the plan's safe-to-spend needs planned income; until then show what was actually spent
+  const planned = A.plan && A.plan.expectedIncome > 0;
+  if (UI.person === 'joint') h += sharedHeroHTML(A);
+  else if (UI.person !== 'all') h += (planned ? planHeroHTML(A) : personHeroHTML(A)) + storyHTML(A);
+  else h += planned ? planHeroHTML(A) : spendHeroHTML(A);
+  if (UI.person === 'all' && two) h += pairHTML(A);
+  if (UI.person !== 'joint' && A.plan && A.plan.fixed.length) h += billsStripHTML(A);
   h += topInsightsHTML(A) + recentHTML(A);
   return h;
 }
@@ -319,7 +336,7 @@ function planHeroHTML(A) {
   if (!A.isCurrent) chip = left >= 0 ? 'Closed under plan' : 'Closed over plan';
   const label = A.isCurrent ? (left >= 0 ? 'Safe to spend' : 'Over your everyday plan') : (left >= 0 ? 'Left unspent' : 'Over plan');
   const sub = A.isCurrent
-    ? (left >= 0 ? (daysIncl > 1 ? 'About ' + moneyR(left / daysIncl) + ' a day · ' + plural(daysIncl, 'day') + ' to go' : 'Last day of the month, and all of it is still yours') : 'Everyday spending is ' + moneyR(-left) + ' past plan')
+    ? (left >= 0 ? (daysIncl > 1 ? 'About ' + moneyR(left / daysIncl) + ' a day · ' + plural(daysIncl, 'day') + ' to go' : 'Last day of the ' + cycleWord() + ', and all of it is still yours') : 'Everyday spending is ' + moneyR(-left) + ' past plan')
     : 'Everyday plan ' + money(P.flexible) + ', spent ' + moneyR(P.everydaySpent);
   const rings = [
     { v: P.flexible > 0 ? P.everydaySpent / P.flexible : (P.everydaySpent > 0 ? 1 : 0), color: 'var(--ring1)', over: P.everydaySpent > P.flexible },
@@ -349,37 +366,80 @@ function spendHeroHTML(A) {
     chip = '<span class="chip tone-' + tone + '">' + ic(tone === 'good' ? 'check' : 'alert') + label + '</span>';
     meter = '<div class="meter tone-' + tone + '" role="meter" aria-label="Budget used" aria-valuemin="0" aria-valuemax="' + Math.round(b) + '" aria-valuenow="' + Math.round(A.spend) + '"><span style="width:' + Math.min(100, A.spend / b * 100).toFixed(1) + '%"></span>' + (A.isCurrent ? '<i class="pace" style="left:' + (A.dayIndex / A.p.days * 100).toFixed(1) + '%" title="Even pace for today"></i>' : '') + '</div>';
     sub = left >= 0 ? esc(money(left)) + ' left of ' + esc(money(b)) + (A.isCurrent ? ' · about ' + esc(moneyR(left / (A.daysLeft + 1))) + ' a day' : '') : esc(money(-left)) + ' over your ' + esc(money(b)) + ' budget';
-  } else sub = 'Add your income and fixed costs to see what is safe to spend.';
-  return '<section class="glass hero refract"><div class="hero-top"><span class="eyebrow">Spent ' + (A.isCurrent ? 'this month' : 'in ' + esc(periodLabel(A.p))) + '</span>' + chip + '</div>' +
+  } else sub = getPlan().fixed.length ? 'Add each income to the plan to see what is safe to spend.' : 'Add your income and fixed costs to see what is safe to spend.';
+  return '<section class="glass hero refract"><div class="hero-top"><span class="eyebrow">Spent ' + (A.isCurrent ? 'this ' + cycleWord() : 'in ' + esc(periodLabel(A.p))) + '</span>' + chip + '</div>' +
     '<div class="hero-num" data-count="' + Math.round(A.spend) + '" data-key="hero">' + esc(moneyR(A.spend)) + '</div>' + meter +
     '<p class="hero-sub">' + sub + '</p><dl class="hero-stats"><div><dt>Income</dt><dd>' + esc(moneyR(A.income)) + '</dd></div><div><dt>Saved</dt><dd>' + (A.income > 0 ? esc(moneyR(A.saved)) + ' <small>' + pct(A.savingsRate) + '</small>' : '–') + '</dd></div><div><dt>' + (A.isCurrent && A.dayIndex >= 3 ? 'Projected' : 'Per day') + '</dt><dd>' + esc(A.isCurrent && A.dayIndex >= 3 ? money(niceRound(A.projection)) : moneyR(A.avgPerDay)) + '</dd></div></dl>' +
-    (getPlan().exists ? '' : '<div class="hero-cta"><button type="button" class="btn primary" data-act="tab" data-arg="plan">' + ic('plan') + 'Plan your month</button></div>') + '</section>';
+    (!getPlan().exists ? '<div class="hero-cta"><button type="button" class="btn primary" data-act="tab" data-arg="plan">' + ic('plan') + 'Plan your ' + cycleWord() + '</button></div>'
+      : !getPlan().incomes.length ? '<div class="hero-cta"><button type="button" class="btn primary" data-act="plan-new" data-arg="income">' + ic('plus') + 'Add income to the plan</button></div>' : '') + '</section>';
 }
 function personHeroHTML(A) {
-  const who = UI.person, name = who === 'joint' ? 'Shared' : memberName(who);
-  const label = who === 'joint' ? 'Shared spending' : name + '’s spending';
-  return '<section class="glass hero refract"><div class="hero-top"><span class="eyebrow">' + esc(label) + (A.isCurrent ? ' this month' : '') + '</span>' + avatarHTML(who) + '</div>' +
+  const who = UI.person, name = memberName(who);
+  return '<section class="glass hero refract"><div class="hero-top"><span class="eyebrow">' + esc(name) + ' spent' + (A.isCurrent ? ' this cycle' : '') + '</span>' + avatarHTML(who) + '</div>' +
     '<div class="hero-num" data-count="' + Math.round(A.spend) + '" data-key="hero">' + esc(moneyR(A.spend)) + '</div>' +
-    '<p class="hero-sub">' + (A.prevToDate > 0 && A.isCurrent ? esc(deltaText(A.spend, A.prevToDate, true, 'the same day last month').text) : esc(plural(A.count, 'entry', 'entries'))) + '</p>' +
-    '<dl class="hero-stats"><div><dt>' + (who === 'joint' ? 'Shared income' : 'Earned') + '</dt><dd>' + esc(moneyR(A.income)) + '</dd></div><div><dt>Invested</dt><dd>' + esc(moneyR(A.invest)) + '</dd></div><div><dt>Per day</dt><dd>' + esc(moneyR(A.avgPerDay)) + '</dd></div></dl></section>';
+    '<p class="hero-sub">Own spending plus their share of shared costs' + (A.prevToDate > 0 && A.isCurrent ? ' · ' + esc(deltaText(A.spend, A.prevToDate, true, 'the same day last cycle').text) : '') + '</p>' +
+    '<dl class="hero-stats"><div><dt>Earned</dt><dd>' + esc(moneyR(A.income)) + '</dd></div><div><dt>Invested</dt><dd>' + esc(moneyR(A.invest)) + '</dd></div><div><dt>Per day</dt><dd>' + esc(moneyR(A.avgPerDay)) + '</dd></div></dl>' +
+    (getPlan().incomes.some(x => x.who === who) ? '' : '<div class="hero-cta"><button type="button" class="btn primary" data-act="plan-quick" data-arg="income:salary:Salary:' + who + '">' + ic('plus') + 'Add ' + esc(name) + '’s salary to the plan</button></div>') + '</section>';
 }
-function splitHTML(A) {
-  const s = A.split, ms = members();
-  const cards = ms.map(m => ({ id: m.id, name: m.name, spend: s[m.id].spend, income: s[m.id].income })).concat([{ id: 'joint', name: 'Shared', spend: s.joint.spend, income: s.joint.income }]);
-  const max = Math.max(1, ...cards.map(c => c.spend));
-  return '<section class="split">' + cards.map(c => '<button type="button" class="glass split-card" data-act="person" data-arg="' + c.id + '">' + avatarHTML(c.id) +
-    '<span class="sc-name">' + esc(c.name) + '</span><span class="sc-num">' + esc(compact(c.spend)) + '</span>' +
-    '<span class="sc-sub">' + (c.id === 'joint' ? 'spent together' : c.income ? esc(compact(c.income)) + ' earned' : 'spent') + '</span>' +
-    '<span class="sc-bar"><i class="' + c.id + '" style="width:' + (c.spend / max * 100).toFixed(1) + '%"></i></span></button>').join('') + '</section>';
+/* one person's money, as a short story: earned, minus own spending, minus their share of shared costs, equals saved */
+function storyHTML(A) {
+  const w = A.person, nm = memberName(w), part = w === 'p1' ? A.ratio : 1 - A.ratio;
+  const saved = A.income - A.spend;
+  return '<section class="glass card story"><p class="eyebrow">' + esc(nm) + '’s money ' + (A.isCurrent ? 'this cycle' : 'in ' + esc(periodLabel(A.p))) + '</p>' +
+    '<div class="st-row"><span>Earned</span><b>' + esc(money(Math.round(A.income))) + '</b></div>' +
+    '<div class="st-row"><span>Own spending<small>EMIs, family, personal</small></span><b>− ' + esc(money(Math.round(A.own))) + '</b></div>' +
+    '<div class="st-row"><span>Share of shared costs<small>' + pct(part) + ' of ' + esc(money(Math.round(A.sharedTotal))) + '</small></span><b>− ' + esc(money(Math.round(A.shareSpend))) + '</b></div>' +
+    '<div class="st-row total"><span>' + (saved >= 0 ? 'Saved' : 'Spent more than earned') + '<small>' + (saved >= 0 ? 'investments count as saved' : A.income > 0 ? 'income logged so far this ' + cycleWord() : 'no income logged yet this ' + cycleWord()) + '</small></span><b class="' + (saved >= 0 ? 'in' : 'neg') + '">' + esc(money(Math.round(Math.abs(saved)))) + (A.income > 0 && saved >= 0 ? ' <small>' + pct(saved / A.income) + '</small>' : '') + '</b></div>' +
+    '<p class="st-foot">' + esc(money(Math.round(A.paidOut))) + ' left ' + esc(nm) + '’s pocket, counting shared costs they paid for both of you.</p>' + settleLine(w) + '</section>';
 }
+function sharedHeroHTML(A) {
+  const pb = A.paidBy || { p1: 0, p2: 0 }, r = A.ratio;
+  return '<section class="glass hero refract"><div class="hero-top"><span class="eyebrow">Shared spending' + (A.isCurrent ? ' this cycle' : '') + '</span>' + avatarHTML('joint') + '</div>' +
+    '<div class="hero-num" data-count="' + Math.round(A.spend) + '" data-key="hero">' + esc(moneyR(A.spend)) + '</div>' +
+    '<p class="hero-sub">Split ' + splitLabel() + ': ' + esc(memberName('p1')) + ' ' + esc(moneyR(A.spend * r)) + ' · ' + esc(memberName('p2')) + ' ' + esc(moneyR(A.spend * (1 - r))) + '</p>' +
+    paidBarHTML(pb.p1, pb.p2) + settleLine('joint') + '</section>';
+}
+function paidBarHTML(a, b) {
+  if (a + b <= 0) return '';
+  return '<div class="paid-bar" role="img" aria-label="' + esc('Paid: ' + memberName('p1') + ' ' + money(a) + ', ' + memberName('p2') + ' ' + money(b)) + '"><i class="p1" style="flex:' + a.toFixed(2) + '"></i><i class="p2" style="flex:' + b.toFixed(2) + '"></i></div>' +
+    '<div class="paid-legend"><span><i class="p1"></i>' + esc(memberName('p1')) + ' paid ' + esc(moneyR(a)) + '</span><span><i class="p2"></i>' + esc(memberName('p2')) + ' paid ' + esc(moneyR(b)) + '</span></div>';
+}
+/* the single number that keeps a shared life fair: who owes whom, across everything logged */
+function settleLine(view) {
+  const b = balanceNow();
+  if (!b) return '';
+  if (!b.amount) return '<div class="settle ok">' + ic('check') + '<span class="st-txt">All square between you two</span></div>';
+  return '<div class="settle">' + avatarHTML(b.from, 'xs') + '<span class="st-txt">' + esc(memberName(b.from)) + ' owes ' + esc(memberName(b.to)) + ' <b>' + esc(moneyR(b.amount)) + '</b></span><button type="button" class="btn mini primary" data-act="settle">Settle up</button></div>';
+}
+function pairHTML(A) {
+  const P = A.people;
+  if (!P || !P.p1) return '';
+  const card = w => {
+    const x = P[w], tot = Math.max(x.earned, x.spent, 1);
+    const tone = x.rate == null ? '' : x.rate >= 0.2 ? 'good' : x.rate >= 0 ? 'warn' : 'bad';
+    return '<button type="button" class="glass pcard" data-act="person" data-arg="' + w + '">' +
+      '<span class="pc-top">' + avatarHTML(w) + '<b>' + esc(memberName(w)) + '</b></span>' +
+      '<span class="pc-rows"><span><small>Earned</small><b>' + esc(compact(x.earned)) + '</b></span><span><small>Spent</small><b>' + esc(compact(x.spent)) + '</b></span><span><small>' + (x.saved < 0 ? 'Overspent' : 'Saved') + '</small><b class="' + (x.saved < 0 ? 'neg' : 'in') + '">' + esc(compact(Math.abs(x.saved))) + '</b></span>' +
+      (x.rate != null ? '<span class="pc-rate tone-' + tone + '">' + (x.rate >= 0 ? pct(x.rate) + ' of income kept' : 'spent more than earned') + '</span>' : '') + '</span>' +
+      '<span class="pc-bar" aria-hidden="true"><i class="own" style="width:' + (x.own / tot * 100).toFixed(1) + '%"></i><i class="sh" style="width:' + (x.shared / tot * 100).toFixed(1) + '%"></i><i class="sv" style="width:' + (Math.max(0, x.saved) / tot * 100).toFixed(1) + '%"></i></span>' +
+      '<span class="pc-legend"><span><i class="own"></i>Own ' + esc(compact(x.own)) + '</span><span><i class="sh"></i>Shared ' + esc(compact(x.shared)) + '</span></span></button>';
+  };
+  return '<section class="sec"><div class="sec-head"><h2 class="sec-h">You two</h2><span class="sec-sum">Shared costs split ' + splitLabel() + '</span></div>' +
+    '<div class="pair">' + card('p1') + card('p2') + '</div>' +
+    '<div class="glass shared-card"><button type="button" class="sc-head" data-act="person" data-arg="joint">' + avatarHTML('joint') + '<span><b>Shared ' + esc(moneyR(A.sharedSpend)) + '</b><small>' + (A.sharedSpend ? 'rent, groceries, outings and anything else for both of you' : 'Nothing shared yet in this cycle') + '</small></span></button>' +
+    paidBarHTML(P.p1.paidShared, P.p2.paidShared) + settleLine('all') + '</div></section>';
+}
+
 const STATE_LABEL = { done: ['check', 'Paid'], partial: ['clock', 'Part paid'], late: ['alert', 'Late'], soon: ['bell', 'Due soon'], upcoming: ['calendar', 'Due'] };
 function billsStripHTML(A) {
   const P = A.plan, solo = household().solo, rank = { late: 0, soon: 1, partial: 2, upcoming: 3, done: 4 };
   const rows = P.fixed.slice().sort((a, b) => rank[a.state] - rank[b.state] || (a.due < b.due ? -1 : 1));
-  return '<section class="sec"><div class="sec-head"><h2 class="sec-h">Bills this month</h2><span class="sec-sum">' + P.doneCount + ' of ' + P.fixed.length + ' paid</span></div><div class="strip">' + rows.map(r =>
-    '<button type="button" class="glass bill st-' + r.state + '" data-act="plan-item" data-arg="' + esc(r.id) + '">' + ic(STATE_LABEL[r.state][0]) +
-    '<span class="b-name">' + esc(r.name) + '</span><span class="b-amt">' + esc(moneyR(r.amount)) + '</span>' +
-    '<span class="b-due">' + esc((r.state === 'done' ? 'Paid' : r.state === 'late' ? 'Late since ' + shortDate(r.due) : r.state === 'partial' ? moneyR(r.paid) + ' paid' : 'Due ' + (r.due === A.today ? 'today' : shortDate(r.due))) + (solo ? '' : ' · ' + memberName(r.who))) + '</span></button>').join('') + '</div></section>';
+  return '<section class="sec"><div class="sec-head"><h2 class="sec-h">Bills this cycle</h2><span class="sec-sum">' + P.doneCount + ' of ' + P.fixed.length + ' paid</span></div><div class="strip">' + rows.map(r => {
+    const mine = r.mine != null && r.part < 1;
+    return '<button type="button" class="glass bill st-' + r.state + '" data-act="plan-item" data-arg="' + esc(r.id) + '">' + ic(STATE_LABEL[r.state][0]) +
+      '<span class="b-name">' + esc(r.name) + '</span><span class="b-amt">' + esc(moneyR(mine ? r.mine : r.amount)) + '</span>' +
+      '<span class="b-due">' + esc((r.state === 'done' ? 'Paid' : r.state === 'late' ? 'Late since ' + shortDate(r.due) : r.state === 'partial' ? moneyR(r.paid) + ' paid' : 'Due ' + (r.due === A.today ? 'today' : shortDate(r.due))) + (mine ? ' · share of ' + compact(r.amount) : solo ? '' : ' · ' + (r.who === 'joint' ? 'shared' : memberName(r.who)))) + '</span></button>';
+  }).join('') + '</div></section>';
 }
 function insightItemHTML(x) {
   const toneWord = { good: 'Good', warn: 'Heads up', bad: 'Alert', info: '' }[x.tone] || '';
@@ -393,7 +453,9 @@ function topInsightsHTML(A) {
   return '<section class="sec"><div class="sec-head"><h2 class="sec-h">What stands out</h2>' + (A.insights.length > 4 ? '<button type="button" class="link" data-act="tab" data-arg="insights">All insights</button>' : '') + '</div><ul class="ins-row">' + list.map(insightItemHTML).join('') + '</ul></section>';
 }
 function recentHTML(A) {
-  const base = A.isCurrent ? (UI.person === 'all' ? sortedEntries() : sortedEntries().filter(e => whoOf(e) === UI.person)) : A.entries;
+  const r = shareRatio();
+  const mine = e => (UI.person === 'all' ? true : UI.person === 'joint' ? whoOf(e) === 'joint' : shareOf(e, UI.person, r) > 0);
+  const base = A.isCurrent ? sortedEntries().filter(mine) : A.entries;
   const list = base.slice(0, 8);
   const body = list.length ? dayGroupsHTML(list, false) : '<div class="empty glass"><h3>Nothing logged in ' + esc(periodLabel(A.p)) + '</h3><p>Entries you add for these dates show up here.</p></div>';
   return '<section class="sec"><div class="sec-head"><h2 class="sec-h">' + (A.isCurrent ? 'Latest entries' : 'Entries') + '</h2><button type="button" class="link" data-act="tab" data-arg="activity">See all</button></div>' + body + '</section>';
@@ -414,12 +476,14 @@ function eqItem(label, v, key) { return '<div class="eq-item' + (key ? ' ' + key
 function planRowHTML(r, today) {
   const c = catById(r.cat, r.kind === 'income' ? 'income' : 'expense'), solo = household().solo;
   const doneWord = r.kind === 'income' ? 'Received' : 'Paid';
+  const mine = r.mine != null && r.part < 1, amount = mine ? r.mine : r.amount;
   const st = { done: doneWord, partial: moneyR(r.paid) + ' of ' + moneyR(r.amount), late: (r.kind === 'income' ? 'Expected ' : 'Late · due ') + shortDate(r.due), soon: 'Due ' + (r.due === today ? 'today' : shortDate(r.due)), upcoming: 'Due ' + shortDate(r.due) }[r.state];
+  const whoTxt = solo ? '' : (r.who === 'joint' ? (mine ? 'Shared · ' + pct(r.part) + ' of ' + compact(r.amount) : 'Shared · split ' + splitLabel()) : memberName(r.who)) + ' · ';
   return '<div class="pl-row st-' + r.state + '">' + avatarHTML(r.who) +
     '<button type="button" class="pl-main" data-act="plan-edit" data-arg="' + esc(r.id) + '"><span class="pl-name"><span aria-hidden="true">' + esc(c.emoji) + '</span> ' + esc(r.name) + '</span>' +
-    '<span class="pl-meta">' + esc((solo ? '' : memberName(r.who) + ' · ') + ordinal(r.day) + ' of the month' + (r.auto ? ' · adds itself' : '')) + '</span></button>' +
-    '<span class="pl-right"><b>' + esc(moneyR(r.amount)) + '</b><span class="pl-st">' + ic(STATE_LABEL[r.state][0]) + esc(st) + '</span></span>' +
-    (r.state === 'done' ? '<span class="pl-done" aria-hidden="true">' + ICON.check + '</span>' : '<button type="button" class="mini-btn" data-act="plan-pay" data-arg="' + esc(r.id) + '">' + doneWord + '</button>') + '</div>';
+    '<span class="pl-meta">' + esc(whoTxt + ordinal(r.day) + (r.auto ? ' · logs itself' : '')) + '</span></button>' +
+    '<span class="pl-right"><b>' + esc(moneyR(amount)) + '</b><span class="pl-st">' + ic(STATE_LABEL[r.state][0]) + esc(st) + '</span></span>' +
+    (r.state === 'done' ? '<span class="pl-done" aria-hidden="true">' + ICON.check + '</span>' : '<button type="button" class="mini-btn" data-act="' + (r.who === 'joint' && !solo ? 'plan-item' : 'plan-pay') + '" data-arg="' + esc(r.id) + '">' + doneWord + '</button>') + '</div>';
 }
 function planListHTML(title, rows, kind, A) {
   const P = A.plan;
@@ -444,26 +508,29 @@ function envelopesHTML(A) {
   h += '<button type="button" class="pl-add" data-act="budget-add">' + ic('plus') + 'Add a category budget</button></div></section>';
   return h;
 }
+function goalRowHTML(w, goal, A) {
+  const solo = household().solo, proj = Math.max(0, A.projectedSave || 0), prog = goal ? proj / goal : 0, tone = prog >= 1 ? 'good' : prog >= 0.75 ? 'warn' : 'bad';
+  return '<button type="button" class="goal-row" data-act="plan-goal">' + (solo ? '' : avatarHTML(w)) + '<span class="gr-main"><span class="gr-top"><b>' + (solo ? 'Each month' : esc(memberName(w))) + '</b><span>' + (goal ? esc(money(goal)) : 'No goal yet') + '</span></span>' +
+    (goal ? '<span class="meter sm tone-' + tone + '"><span style="width:' + Math.min(100, prog * 100).toFixed(1) + '%"></span></span><small>' + (A.isCurrent ? 'On course to keep ' : 'Kept ') + esc(moneyR(proj)) + (prog >= 1 ? ', goal covered' : '') + '</small>' : '<small>Set what ' + (solo ? 'you want' : esc(memberName(w)) + ' wants') + ' to keep each cycle</small>') + '</span></button>';
+}
 function planHTML() {
-  const A = analyze(UI.period, 'all');
-  if (!getPlan().exists) return planSetupHTML(A) + envelopesHTML(A);
-  const P = A.plan;
-  let h = '<section class="greet"><h1>' + (A.isCurrent ? 'This month’s <em>plan</em>' : '<em>Plan</em> for ' + esc(periodLabel(A.p))) + '</h1><p>What comes in, what is fixed and what you keep. The rest is safe to spend.</p></section>';
-  h += '<section class="glass eq refract">' + eqItem('Coming in', P.expectedIncome || P.incomeActual) + '<span class="op">−</span>' + eqItem('Fixed', P.fixedTotal) + '<span class="op">−</span>' + eqItem('Saving', P.save) + '<span class="op">=</span>' + eqItem('Everyday', P.flexible, 'res' + (P.flexible < 0 ? ' neg' : '')) + '</section>';
-  if (P.flexible < 0) h += '<p class="note-box">Planned costs and saving are ' + esc(money(-P.flexible)) + ' more than the money coming in. Lower a fixed cost or the saving goal, or add income.</p>';
-  h += '<section class="glass cc"><div class="cc-head"><div><h3>Where the money goes</h3><p class="cc-sub">Each income on the left, every planned use on the right</p></div></div><div class="chart" data-chart="flow"></div></section>';
+  const view = UI.person === 'p1' || UI.person === 'p2' ? UI.person : 'all';
+  const all = analyze(UI.period, 'all');
+  if (!getPlan().exists) return planSetupHTML(all) + envelopesHTML(all);
+  const A = analyze(UI.period, view), P = A.plan, person = view !== 'all', nm = person ? memberName(view) : '';
+  let h = '<section class="greet"><h1>' + (person ? esc(nm) + '’s <em>plan</em>' : A.isCurrent ? 'This cycle’s <em>plan</em>' : '<em>Plan</em> for ' + esc(periodLabel(A.p))) + '</h1><p>' +
+    (person ? 'Their income, their own fixed costs, their share of the shared ones and what they keep. The rest is theirs to spend.' : 'What comes in, what is fixed and what you keep. The rest is safe to spend.') + '</p></section>';
+  h += '<section class="glass eq refract">' + eqItem(person ? 'Earns' : 'Coming in', P.expectedIncome || P.incomeActual) + '<span class="op">−</span>' + eqItem('Fixed', P.fixedTotal) + '<span class="op">−</span>' + eqItem('Saving', P.save) + '<span class="op">=</span>' + eqItem('Everyday', P.flexible, 'res' + (P.flexible < 0 ? ' neg' : '')) + '</section>';
+  if (P.flexible < 0) h += '<p class="note-box">Planned costs and saving are ' + esc(money(-P.flexible)) + ' more than ' + (person ? esc(nm) + ' earns' : 'the money coming in') + '. Lower a fixed cost or the saving goal, or add income.</p>';
+  h += '<section class="glass cc"><div class="cc-head"><div><h3>Where the money goes</h3><p class="cc-sub">' + (person ? 'Shared costs at ' + esc(nm) + '’s share' : 'Each income on the left, every planned use on the right') + '</p></div></div><div class="chart" data-chart="flow" data-view="' + view + '"></div></section>';
   h += planListHTML('Money in', P.incomes, 'income', A);
   h += planListHTML('Fixed costs', P.fixed, 'fixed', A);
-  const g = P.save;
-  h += '<section class="sec"><div class="sec-head"><h2 class="sec-h">Saving goal</h2><button type="button" class="link" data-act="plan-goal">' + (g ? 'Change' : 'Set a goal') + '</button></div><div class="glass card goal">';
-  if (g) {
-    const prog = Math.max(0, A.projectedSave) / g, tone = prog >= 1 ? 'good' : prog >= 0.75 ? 'warn' : 'bad';
-    h += '<div class="goal-top"><b>' + esc(money(g)) + '</b><span class="chip tone-' + tone + '">' + ic(tone === 'good' ? 'check' : 'alert') + (tone === 'good' ? 'On track' : 'Behind') + '</span></div>' +
-      '<div class="meter tone-' + tone + '"><span style="width:' + Math.min(100, prog * 100).toFixed(1) + '%"></span></div>' +
-      '<p class="hero-sub">' + (A.isCurrent ? 'On course to keep ' : 'Kept ') + '<b>' + esc(moneyR(Math.max(0, A.projectedSave))) + '</b> this month, counting income minus everything spent. Investments count as saved.</p>';
-  } else h += '<p class="hero-sub">Decide how much to keep each month. It is set aside before your everyday money is worked out.</p>';
+  const solo = household().solo, g = getPlan().saveBy;
+  h += '<section class="sec"><div class="sec-head"><h2 class="sec-h">Saving ' + (solo || person ? 'goal' : 'goals') + '</h2><button type="button" class="link" data-act="plan-goal">' + (P.save ? 'Change' : 'Set') + '</button></div><div class="glass list goals">';
+  if (solo) h += goalRowHTML('p1', g.p1, A);
+  else for (const w of person ? [view] : ['p1', 'p2']) h += goalRowHTML(w, g[w], person ? A : analyze(UI.period, w));
   h += '</div></section>';
-  return h + envelopesHTML(A);
+  return h + (person ? '' : envelopesHTML(A));
 }
 
 /* ---------- activity ---------- */
@@ -486,14 +553,15 @@ function matchQuery(e, q) {
     const n = parseFloat(q.replace(/[^\d.]/g, ''));
     if (n > 0) return Math.abs(e.amount - n) < 0.005 || String(e.amount).indexOf(String(n)) === 0;
   }
-  const hay = (e.note + ' ' + e.merchant + ' ' + e.method + ' ' + catById(e.cat, e.type).name + ' ' + memberName(whoOf(e)) + ' ' + e.tags.map(t => '#' + t).join(' ')).toLowerCase();
+  const hay = (e.note + ' ' + e.merchant + ' ' + e.method + ' ' + catById(e.cat, e.type).name + ' ' + memberName(whoOf(e)) + ' ' + memberName(payerOf(e)) + ' ' + e.tags.map(t => '#' + t).join(' ')).toLowerCase();
   return q.split(/\s+/).every(w => hay.indexOf(w) >= 0);
 }
 function activityList() {
   const q = UI.act.q.trim().toLowerCase();
   let list = sortedEntries();
   if (!q) { const p = periodFromKey(UI.period, settings().startDay); list = list.filter(e => e.date >= p.start && e.date <= p.end); }
-  if (UI.person !== 'all') list = list.filter(e => whoOf(e) === UI.person);
+  if (UI.person === 'joint') list = list.filter(e => whoOf(e) === 'joint');
+  else if (UI.person !== 'all') { const r = shareRatio(); list = list.filter(e => shareOf(e, UI.person, r) > 0 || payerOf(e) === UI.person); }
   if (UI.act.type !== 'all') list = list.filter(e => e.type === UI.act.type);
   if (UI.act.cat) list = list.filter(e => e.cat === UI.act.cat);
   if (q) list = list.filter(e => matchQuery(e, q));
@@ -511,10 +579,12 @@ function updateActivity() {
   sel.value = UI.act.cat;
   for (const b of $$('[data-act="act-type"]')) b.setAttribute('aria-pressed', String(b.dataset.arg === UI.act.type));
   const list = activityList();
-  const spent = sum(list.filter(e => kindOf(e) === 'spend'), e => e.amount), inc = sum(list.filter(e => e.type === 'income'), e => e.amount);
+  const view = UI.person === 'p1' || UI.person === 'p2' ? UI.person : '', r = shareRatio();
+  const amt = e => (view ? e.amount * shareOf(e, view, r) : e.amount);
+  const spent = sum(list.filter(e => kindOf(e) === 'spend'), amt), inc = sum(list.filter(e => e.type === 'income'), amt);
   const p = periodFromKey(UI.period, settings().startDay);
   const who = UI.person === 'all' ? '' : ' · ' + (UI.person === 'joint' ? 'shared' : memberName(UI.person));
-  $('#act-sum').innerHTML = list.length ? '<span>' + plural(list.length, 'entry', 'entries') + (UI.act.q.trim() ? ' · all dates' : ' · ' + esc(periodLabel(p))) + esc(who) + '</span><span>Spent <b>' + esc(money(spent)) + '</b>' + (inc ? ' · Income <b class="in">' + esc(money(inc)) + '</b>' : '') + '</span>' : '';
+  $('#act-sum').innerHTML = list.length ? '<span>' + plural(list.length, 'entry', 'entries') + (UI.act.q.trim() ? ' · all dates' : ' · ' + esc(periodLabel(p))) + esc(who) + '</span><span>' + (view ? esc(memberName(view)) + '’s share <b>' : 'Spent <b>') + esc(money(Math.round(spent))) + '</b>' + (inc ? ' · Income <b class="in">' + esc(money(Math.round(inc))) + '</b>' : '') + '</span>' : '';
   const shown = list.slice(0, UI.actLimit);
   let h;
   if (!list.length) {
@@ -608,6 +678,12 @@ function whoBarsHTML(A) {
       '<div class="sbar-sub">' + esc(parts.map(w => memberName(w) + ' ' + compact(v[w])).join(' · ')) + '</div></div>';
   }).join('') + '</div>';
 }
+function compareHTML(A) {
+  const P = A.people, rows = [['Earned', 'earned'], ['Spent', 'spent'], ['Own spending', 'own'], ['Share of shared', 'shared'], ['Saved', 'saved']];
+  const max = Math.max(1, ...['p1', 'p2'].map(w => Math.max(P[w].earned, P[w].spent)));
+  return '<div class="cmp">' + rows.map(([label, k]) => '<div class="cmp-row"><span class="cmp-l">' + label + '</span>' + ['p1', 'p2'].map(w => '<span class="cmp-bar"><i class="' + w + '" style="width:' + (Math.max(0, P[w][k]) / max * 100).toFixed(1) + '%"></i><b' + (P[w][k] < 0 ? ' class="neg"' : '') + '>' + esc(compact(P[w][k])) + '</b></span>').join('') + '</div>').join('') +
+    '<div class="cmp-row"><span class="cmp-l">Saving rate</span>' + ['p1', 'p2'].map(w => '<span class="cmp-bar txt"><b>' + (P[w].rate == null ? '–' : pct(P[w].rate)) + '</b></span>').join('') + '</div></div>';
+}
 function incomeSourcesHTML(A) {
   const rows = Array.from(A.incomeBy.entries()).sort((a, b) => b[1].total - a[1].total);
   if (!rows.length) return '<p class="muted">No income logged in this period yet. Try “salary 85000 credited”.</p>';
@@ -655,13 +731,14 @@ function updateInsights() {
   const pl = esc(periodLabel(A.p)), solo = household().solo;
   let h = '';
   if (A.insights.length) h += '<section class="sec"><h2 class="sec-h">What stands out</h2><ul class="ins-list">' + A.insights.map(insightItemHTML).join('') + '</ul></section>';
-  if (UI.person === 'all' && !solo) {
-    h += '<section class="sec"><h2 class="sec-h">Who spends on what</h2>';
-    h += chartCard('who', 'By person and category', 'Each bar splits a category between you', keyRect('var(--p1)', esc(memberName('p1'))) + keyRect('var(--p2)', esc(memberName('p2'))) + keyRect('var(--pj)', 'Shared'), whoBarsHTML(A), '');
+  if (UI.person === 'all' && !solo && A.people && A.people.p1) {
+    h += '<section class="sec"><h2 class="sec-h">You two</h2>';
+    h += chartCard('compare', esc(memberName('p1')) + ' and ' + esc(memberName('p2')), 'This cycle side by side. Spent counts own spending plus each share of shared costs.', keyRect('var(--p1)', esc(memberName('p1'))) + keyRect('var(--p2)', esc(memberName('p2'))), compareHTML(A), '');
+    h += chartCard('who', 'Who spends on what', 'Each bar splits a category into each person’s own spending and what you share', keyRect('var(--p1)', esc(memberName('p1')) + '’s own') + keyRect('var(--p2)', esc(memberName('p2')) + '’s own') + keyRect('var(--pj)', 'Shared'), whoBarsHTML(A), '');
     h += '</section>';
   }
   h += '<section class="sec"><h2 class="sec-h">Where the money went</h2>';
-  h += chartCard('pace', 'Running total', A.isCurrent ? 'Spending so far this month against last month' + (A.budgetTotal ? ' and your budget' : '') : 'How spending built up through ' + pl,
+  h += chartCard('pace', 'Running total', A.isCurrent ? 'Spending so far this ' + cycleWord() + ' against the last one' + (A.budgetTotal ? ' and your budget' : '') : 'How spending built up through ' + pl,
     keyLine('var(--s1)', 'This month') + (A.isCurrent && A.dayIndex < A.p.days ? keyLine('var(--s1)', 'Projected', true) : '') + keyLine('var(--muted-line)', 'Last month') + (A.budgetTotal ? keyLine('var(--budget-line)', 'Budget') : ''),
     '<div class="chart" data-chart="pace"></div>', paceTable(A));
   h += chartCard('cats', 'By category', 'Tap a category to see its entries' + (A.priorCount ? '. Arrows compare with your usual pace.' : '.'), '', categoryBarsHTML(A), '');
@@ -678,7 +755,7 @@ function updateInsights() {
   body.innerHTML = h;
   drawCharts(A);
 }
-function inA(A) { return A.income > 0 ? 'Share of income ' + (A.isCurrent ? 'this month' : 'in ' + esc(periodLabel(A.p))) : 'Share of outflow, since no income is logged'; }
+function inA(A) { return A.income > 0 ? 'Share of income ' + (A.isCurrent ? 'this ' + cycleWord() : 'in ' + esc(periodLabel(A.p))) : 'Share of outflow, since no income is logged'; }
 function drawCharts(A) {
   for (const el of $$('#ins-body .chart[data-chart]')) {
     const k = el.dataset.chart;
@@ -802,7 +879,8 @@ function onEntryInput() {
   clearTimeout(parseTimer);
   parseTimer = setTimeout(() => { UI.draft = parseText($('#entry').value, parseCtx()); renderSlips(); }, 80);
 }
-function draftWho(d) { return d.who || defaultWhoFor(d.cat); }
+function draftWho(d) { return entryPeople(d).who; }
+function personChip(act, i, w, label) { return '<button type="button" class="slip-who" data-act="' + act + '" data-arg="' + i + '" aria-label="' + esc(label) + '. Change">' + avatarHTML(w, 'xs') + esc(label) + '</button>'; }
 function slipHTML(d, i) {
   const c = catById(d.cat, d.type), k = kindOf(d), solo = household().solo;
   const meta = [];
@@ -812,10 +890,12 @@ function slipHTML(d, i) {
   if (d.tags && d.tags.length) meta.push('#' + d.tags.join(' #'));
   if (k === 'invest') meta.push('counts as saving');
   if (k === 'transfer') meta.push('not counted as spending');
-  const w = draftWho(d);
+  const pp = entryPeople(d);
+  if (!solo && pp.who === 'joint' && d.type !== 'income') meta.push('split ' + splitLabel());
+  const people = solo ? '' : d.type === 'income' ? personChip('slip-for', i, pp.who, pp.who === 'joint' ? 'Shared income' : memberName(pp.who) + '’s income')
+    : personChip('slip-paid', i, pp.paid, memberName(pp.paid) + ' paid') + personChip('slip-for', i, pp.who, pp.who === 'joint' ? 'for both' : 'for ' + memberName(pp.who));
   return '<div class="slip glass ' + d.type + (UI.busy ? ' busy' : '') + '"><div class="slip-chips">' +
-    '<button type="button" class="slip-cat" data-act="slip-cat" data-arg="' + i + '" aria-label="Category ' + esc(c.name) + '. Change category"><span aria-hidden="true">' + esc(c.emoji) + '</span>' + esc(c.name) + '</button>' +
-    (solo ? '' : '<button type="button" class="slip-who" data-act="slip-who" data-arg="' + i + '" aria-label="Whose: ' + esc(memberName(w)) + '. Change">' + avatarHTML(w, 'xs') + esc(memberName(w)) + '</button>') + '</div>' +
+    '<button type="button" class="slip-cat" data-act="slip-cat" data-arg="' + i + '" aria-label="Category ' + esc(c.name) + '. Change category"><span aria-hidden="true">' + esc(c.emoji) + '</span>' + esc(c.name) + '</button>' + people + '</div>' +
     '<span class="slip-amt">' + (d.amount ? esc((d.type === 'income' ? '+' : '') + money(d.amount)) : '<span class="slip-need">amount?</span>') + '</span>' +
     '<button type="button" class="slip-main" data-act="slip-edit" data-arg="' + i + '" aria-label="Edit before saving"><span class="slip-note">' + esc(d.note) + '</span>' + (meta.length ? '<span class="slip-meta">' + meta.map(m => '<span>' + esc(m) + '</span>').join('') + '</span>' : '') + '</button></div>';
 }
@@ -871,7 +951,7 @@ async function submitEntry(source) {
         ai.forEach((a, i) => {
           const same = ai.length === drafts.length, o = same ? UI.slipOver[i] : null;
           if (o && o.cat) { a.cat = o.cat; a.type = catById(o.cat).type; a.catLocked = true; }
-          if (same) { a.tags = drafts[i].tags || []; a.who = (o && o.who) || drafts[i].who || a.who || ''; }
+          if (same) { a.tags = drafts[i].tags || []; a.who = (o && o.who) || drafts[i].who || a.who || ''; a.paid = (o && o.paid) || drafts[i].paid || a.paid || ''; }
         });
         drafts = ai;
       }
@@ -919,21 +999,20 @@ function setMicUI(on) {
   b.setAttribute('aria-label', on ? 'Stop listening' : 'Speak an entry');
   syncDockButtons();
 }
-function dictationCoach() {
+function dictationCoach(msg) {
   setCapOpen(true);
   const el = $('#entry');
   el.focus();
   const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
   const mac = /Mac/i.test(navigator.platform || navigator.userAgent || '');
-  const msg = coarse ? 'Tap the microphone on your keyboard and say it, like “lunch 250 at Subway”.'
-    : mac ? 'Press the Globe key or Fn twice to dictate, then say something like “lunch 250 at Subway”.'
-      : 'Press Windows + H to dictate, then say something like “lunch 250 at Subway”.';
+  const how = coarse ? 'tap the microphone on your keyboard and speak' : mac ? 'press the Globe key or Fn twice and speak' : 'press Windows + H and speak';
+  const text = msg || (IN_CLAUDE ? 'Claude doesn’t let pages use the microphone, so ' + how + ' instead. It fills this box the same way.' : 'Voice isn’t available in this browser, so ' + how + ' instead.');
   const c = $('#coach');
-  c.innerHTML = ic('mic') + '<span>' + esc(msg) + '</span>';
+  c.innerHTML = ic('mic') + '<span>' + esc(text) + '</span>';
   c.hidden = false;
   updateDockHeight();
   clearTimeout(nudge.t);
-  nudge.t = setTimeout(hideCoach, 9000);
+  nudge.t = setTimeout(hideCoach, 10000);
 }
 function toggleVoice() {
   if (Voice.on) { try { Voice.rec.stop(); } catch (e) { /* ignore */ } return; }
@@ -941,7 +1020,7 @@ function toggleVoice() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   let rec;
   try { rec = new SR(); } catch (e) { Voice.failed = true; dictationCoach(); return; }
-  rec.lang = FMT.cur === 'INR' ? 'en-IN' : (navigator.language || 'en-US');
+  rec.lang = Voice.lang || (FMT.cur === 'INR' ? 'en-IN' : (navigator.language || 'en-US'));
   rec.interimResults = true;
   rec.continuous = false;
   let finalText = '', heard = false;
@@ -955,8 +1034,14 @@ function toggleVoice() {
     onEntryInput();
   };
   rec.onerror = ev => {
-    if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed' || ev.error === 'audio-capture') { Voice.failed = true; dictationCoach(); }
-    else if (ev.error === 'no-speech') nudge('I didn’t hear anything. Tap the mic and try again.');
+    const er = ev.error;
+    if (er === 'not-allowed' || er === 'service-not-allowed') {
+      if (IN_CLAUDE) { Voice.failed = true; dictationCoach(); }
+      else nudge('The microphone is blocked for this site. Allow it in your browser’s site settings, then tap the mic again.');
+    } else if (er === 'audio-capture') nudge('No microphone found. Check that one is connected and not busy in another app.');
+    else if (er === 'network') nudge('Voice typing needs an internet connection. Try again when you’re online.');
+    else if (er === 'language-not-supported') { Voice.lang = 'en-US'; nudge('Switched voice to US English. Tap the mic again.'); }
+    else if (er === 'no-speech') nudge('I didn’t hear anything. Tap the mic and try again.');
   };
   rec.onend = () => {
     Voice.on = false; Voice.rec = null; setMicUI(false);

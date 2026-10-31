@@ -22,7 +22,7 @@ function shiftKey(key, n) {
   while (m < 1) { m += 12; y--; }
   return y + '-' + pad2(m);
 }
-/* A budget period starts on `sd` (1-28) and runs to the day before the next start. Key = month it starts in. */
+/* A budget period starts on `sd` (1-31, the salary day; short months start on their last day) and runs to the day before the next start. Key = month it starts in. */
 function periodFromKey(key, sd) {
   const [y, m] = key.split('-').map(Number);
   const start = ymd(new Date(y, m - 1, Math.min(sd, daysInMonth(y, m - 1))));
@@ -33,7 +33,7 @@ function periodFromKey(key, sd) {
 function periodKeyFor(dateStr, sd) {
   const d = parseYMD(dateStr);
   let y = d.getFullYear(), m = d.getMonth() + 1;
-  if (d.getDate() < sd) { m--; if (m < 1) { m = 12; y--; } }
+  if (d.getDate() < Math.min(sd, daysInMonth(y, m - 1))) { m--; if (m < 1) { m = 12; y--; } }
   return y + '-' + pad2(m);
 }
 
@@ -165,6 +165,7 @@ const DEFAULT_CATS = [
   { id: 'fees', name: 'Taxes & Fees', emoji: '🧾', type: 'expense', group: 'needs' },
   { id: 'invest', name: 'Savings & Investments', emoji: '📈', type: 'expense', group: 'savings' },
   { id: 'transfer', name: 'Card Bills & Transfers', emoji: '🔄', type: 'expense', group: 'transfer' },
+  { id: 'settle', name: 'Settling up', emoji: '🤝', type: 'expense', group: 'transfer', hidden: true },
   { id: 'other', name: 'Other', emoji: '📦', type: 'expense', group: 'wants' },
   { id: 'salary', name: 'Salary', emoji: '💼', type: 'income', group: 'income' },
   { id: 'bonus', name: 'Bonus & Incentives', emoji: '🎉', type: 'income', group: 'income' },

@@ -3,7 +3,7 @@ function settings() {
   const s = Store.meta.settings || {};
   return {
     currency: /^[A-Z]{3}$/.test(s.currency || '') ? s.currency : LOCALE.currency,
-    startDay: clamp(parseInt(s.startDay, 10) || 1, 1, 28),
+    startDay: clamp(parseInt(s.startDay, 10) || 1, 1, 31),
     ai: s.ai === 'off' ? 'off' : 'auto',
     voiceAuto: s.voiceAuto !== false,
     dateOrder: s.dateOrder === 'MDY' || s.dateOrder === 'DMY' ? s.dateOrder : LOCALE.dateOrder
@@ -59,17 +59,67 @@ function recurringItems() {
   return out;
 }
 
-/* ---------- the household: one or two people, plus "Shared" ---------- */
-const SHARED_CATS = new Set(['home', 'groceries', 'bills']);
+/* ---------- the household: one or two people ----------
+   Every expense has two sides: who PAID (whose pocket it left) and who it is FOR (one person, or both).
+   Shared costs are split by a ratio, 50/50 unless the household chooses "by income" or a custom split. */
+const DEFAULT_SHARED = ['home', 'groceries', 'bills'];
+let HH_CACHE = { src: undefined, val: null };
 function household() {
   const h = Store.meta.household || {};
+  if (HH_CACHE.src === h && HH_CACHE.val) return HH_CACHE.val;
   const raw = Array.isArray(h.members) ? h.members : [];
   const list = [];
   for (const id of ['p1', 'p2']) {
     const m = raw.find(x => x && x.id === id);
     if (m && typeof m.name === 'string' && m.name.trim()) list.push({ id, name: m.name.trim().slice(0, 24) });
   }
-  return { members: list, solo: list.length < 2, setup: list.length > 0, sharedDefault: h.sharedDefault !== false };
+  const sharedCats = Array.isArray(h.sharedCats) ? h.sharedCats.filter(x => typeof x === 'string').slice(0, 40) : (h.sharedDefault === false ? [] : DEFAULT_SHARED.slice());
+  const val = { members: list, solo: list.length < 2, setup: list.length > 0, sharedCats, sharedDefault: sharedCats.length > 0,
+    splitMode: h.splitMode === 'income' || h.splitMode === 'custom' ? h.splitMode : 'equal', split: clamp(+h.split || 0.5, 0.05, 0.95) };
+  HH_CACHE = { src: h, val };
+  return val;
+}
+function isSharedCat(cat) { return household().sharedCats.indexOf(cat) >= 0; }
+/* the first person's part of a shared cost (the second person's is the rest) */
+function shareRatio() {
+  const h = household();
+  if (h.solo) return 1;
+  if (h.splitMode === 'custom') return h.split;
+  if (h.splitMode === 'income') {
+    const inc = getPlan().incomes, a = sum(inc.filter(x => x.who === 'p1'), x => x.amount), b = sum(inc.filter(x => x.who === 'p2'), x => x.amount);
+    if (a + b > 0) return clamp(a / (a + b), 0.05, 0.95);
+  }
+  return 0.5;
+}
+function splitLabel() { const r = shareRatio(); return Math.round(r * 100) + '/' + Math.round((1 - r) * 100); }
+function shareOf(e, p, r) {
+  if (household().solo) return p === 'p1' ? 1 : 0;
+  const w = whoOf(e);
+  if (w === 'joint') return p === 'p1' ? r : p === 'p2' ? 1 - r : 0;
+  return w === p ? 1 : 0;
+}
+function payerOf(e) {
+  if (household().solo) return 'p1';
+  if (e.paid === 'p1' || e.paid === 'p2') return e.paid;
+  const w = whoOf(e);
+  if (w !== 'joint') return w;
+  return e.by === 'p2' ? 'p2' : 'p1';
+}
+/* who owes whom, across everything ever logged: positive means the second person owes the first */
+let BAL = { k: '', v: null };
+function balanceNow() {
+  if (household().solo) return null;
+  const r = shareRatio(), k = Store.version + '|' + r;
+  if (BAL.k === k) return BAL.v;
+  let net = 0;
+  for (const e of Store.entries.values()) {
+    if (e.type === 'income') continue;
+    net += (payerOf(e) === 'p1' ? e.amount : 0) - e.amount * shareOf(e, 'p1', r);
+  }
+  net = round2(net);
+  const v = Math.abs(net) < 1 ? { amount: 0 } : net > 0 ? { from: 'p2', to: 'p1', amount: net } : { from: 'p1', to: 'p2', amount: -net };
+  BAL = { k, v };
+  return v;
 }
 function members() { const h = household(); return h.members.length ? h.members : [{ id: 'p1', name: 'Me' }]; }
 function memberName(id) {
@@ -85,11 +135,19 @@ function whoOf(e) {
   return 'p1';
 }
 function meId() { const h = household(); return Prefs.me && (Prefs.me === 'p1' || !h.solo) ? Prefs.me : 'p1'; }
-function defaultWhoFor(cat) {
+/* fill in what the words left open: the payer is whoever types it; shared categories are for both */
+function defaultWhoFor(cat, payer) {
   const h = household();
   if (h.solo) return 'p1';
-  if (h.sharedDefault && SHARED_CATS.has(cat)) return 'joint';
-  return meId();
+  if (isSharedCat(cat)) return 'joint';
+  return payer === 'p1' || payer === 'p2' ? payer : meId();
+}
+function entryPeople(d) {
+  if (household().solo) return { paid: 'p1', who: 'p1' };
+  const valid = w => w === 'p1' || w === 'p2';
+  const paid = valid(d.paid) ? d.paid : (d.type === 'income' && valid(d.who) ? d.who : meId());
+  const who = valid(d.who) || d.who === 'joint' ? d.who : (d.type === 'income' ? paid : defaultWhoFor(d.cat, paid));
+  return { paid, who };
 }
 function parseCtx() {
   const s = settings();
@@ -149,8 +207,12 @@ function getPlan() {
     amount: round2(+x.amount), day: clamp(parseInt(x.day, 10) || 1, 1, 31), auto: !!x.auto
   }));
   const incomes = clean(p.incomes, 'income'), fixed = clean(p.fixed, 'fixed');
-  const save = +p.save > 0 ? round2(+p.save) : 0;
-  return { incomes, fixed, save, sample: !!p.sample, exists: !!(incomes.length || fixed.length || save) };
+  const sv = p.save, saveBy = { p1: 0, p2: 0 };
+  if (sv && typeof sv === 'object') { saveBy.p1 = +sv.p1 > 0 ? round2(+sv.p1) : 0; saveBy.p2 = +sv.p2 > 0 ? round2(+sv.p2) : 0; }
+  else if (+sv > 0) { if (household().solo) saveBy.p1 = round2(+sv); else { saveBy.p1 = round2(+sv / 2); saveBy.p2 = round2(+sv - saveBy.p1); } }
+  if (household().solo) saveBy.p2 = 0;
+  const save = round2(saveBy.p1 + saveBy.p2);
+  return { incomes, fixed, save, saveBy, sample: !!p.sample, exists: !!(incomes.length || fixed.length || save) };
 }
 function dueDateFor(p, day) {
   const [y, m] = p.start.split('-').map(Number);
@@ -219,7 +281,27 @@ function planStatus(p, list, today) {
   };
 }
 
-/* ---------- one period, for everyone or one person ---------- */
+/* one person's side of the plan: their own lines plus their part of every shared line */
+function personPlan(H, who, r, entries) {
+  if (!H) return null;
+  const part = w => (w === 'joint' ? (who === 'p1' ? r : 1 - r) : w === who ? 1 : 0);
+  const mine = rows => rows.filter(x => part(x.who) > 0).map(x => Object.assign({}, x, { part: part(x.who), mine: round2(x.amount * part(x.who)) }));
+  const incomes = mine(H.incomes), fixed = mine(H.fixed);
+  const expectedIncome = sum(incomes, x => x.mine), fixedTotal = sum(fixed, x => x.mine);
+  const fixedPaid = sum(fixed, x => Math.min(x.paid, x.amount) * x.part);
+  const save = H.plan.saveBy[who] || 0;
+  const incomeActual = sum(entries.filter(e => e.type === 'income'), e => e.amount);
+  const everydaySpent = sum(entries.filter(e => kindOf(e) === 'spend' && !H.used.has(e.id)), e => e.amount);
+  const baseIncome = expectedIncome || incomeActual, flexible = baseIncome - fixedTotal - save;
+  const fixedLeftSpend = sum(fixed.filter(x => kindOf({ type: 'expense', cat: x.cat }) === 'spend'), x => Math.max(0, x.amount - x.paid) * x.part);
+  return {
+    plan: H.plan, person: who, rows: incomes.concat(fixed), incomes, fixed, expectedIncome, incomeActual, baseIncome, fixedTotal, fixedPaid,
+    fixedLeft: Math.max(0, fixedTotal - fixedPaid), fixedLeftSpend, everydaySpent, flexible, flexLeft: flexible - everydaySpent, save, used: H.used,
+    doneCount: fixed.filter(x => x.state === 'done').length, lateCount: fixed.filter(x => x.state === 'late').length
+  };
+}
+
+/* ---------- one period: overall, one person (their own costs plus their share of shared ones), or shared ---------- */
 let ANALYSIS = new Map();
 function analyze(key, person) {
   person = person || 'all';
@@ -232,7 +314,14 @@ function analyze(key, person) {
   const sd = st.startDay;
   const p = periodFromKey(key, sd), pp = periodFromKey(shiftKey(key, -1), sd);
   const everyone = sortedEntries();
-  const list = person === 'all' ? everyone : everyone.filter(e => whoOf(e) === person);
+  const r = shareRatio();
+  let list = everyone;
+  if (person === 'joint') list = everyone.filter(e => whoOf(e) === 'joint');
+  else if (person === 'p1' || person === 'p2') list = everyone.reduce((out, e) => {
+    const s = shareOf(e, person, r);
+    if (s > 0) out.push(s === 1 ? e : Object.assign({}, e, { amount: round2(e.amount * s), full: e.amount, part: s }));
+    return out;
+  }, []);
   const isCurrent = today >= p.start && today <= p.end;
   const isFuture = today < p.start;
   const dayIndex = isCurrent ? daysBetween(p.start, today) + 1 : (isFuture ? 0 : p.days);
@@ -271,7 +360,7 @@ function analyze(key, person) {
       const r = rules[id];
       if (!r.active || r.tpl.type !== 'expense' || FIXED.has(r.tpl.cat)) continue;
       if (kindOf({ type: 'expense', cat: r.tpl.cat }) !== 'spend') continue;
-      if (person !== 'all' && (r.tpl.who || 'p1') !== person) continue;
+      if (person !== 'all' && (r.tpl.who || 'p1') !== person && r.tpl.who !== 'joint') continue;
       let n = r.next;
       while (n > today && n <= p.end) { recurringLeft += +r.tpl.amount || 0; n = nextOccurrence(n, r.every, r.day); }
     }
@@ -335,7 +424,44 @@ function analyze(key, person) {
 
   const subs = detectRepeating(list, rules, today);
   const b = budgets();
-  const plan = person === 'all' ? planStatus(p, everyone, today) : null;
+  const hplan = person === 'joint' ? null : planStatus(p, everyone, today);
+  const plan = person === 'all' ? hplan : (hplan && !household().solo ? personPlan(hplan, person, r, cur.entries) : hplan);
+  // each person this period: earned, own spending, share of shared costs, saved, and what left their pocket
+  const people = { p1: null, p2: null };
+  let sharedSpend = 0;
+  if (person === 'all' && !household().solo) {
+    for (const w of ['p1', 'p2']) people[w] = { earned: 0, spent: 0, own: 0, shared: 0, invested: 0, paid: 0, paidShared: 0, fixed: 0 };
+    for (const e of cur.entries) {
+      const k = kindOf(e);
+      if (e.cat === 'settle') continue;
+      const joint = whoOf(e) === 'joint';
+      if (k === 'spend' && joint) sharedSpend += e.amount;
+      for (const w of ['p1', 'p2']) {
+        const s = shareOf(e, w, r);
+        if (!s) continue;
+        const v = e.amount * s, P = people[w];
+        if (k === 'income') P.earned += v;
+        else if (k === 'spend') { P.spent += v; if (joint) P.shared += v; else P.own += v; if (FIXED.has(e.cat)) P.fixed += v; }
+        else if (k === 'invest') P.invested += v;
+      }
+      if (k === 'spend' || k === 'invest') { const P = people[payerOf(e)]; P.paid += e.amount; if (joint) P.paidShared += e.amount; }
+    }
+    for (const w of ['p1', 'p2']) { const P = people[w]; P.saved = P.earned - P.spent; P.rate = P.earned > 0 ? P.saved / P.earned : null; }
+  }
+  // one person: own spending vs their share of shared costs, and what actually left their pocket
+  let own = 0, shareSpend = 0, sharedTotal = 0, paidOut = 0;
+  const paidBy = { p1: 0, p2: 0 };
+  if (person === 'p1' || person === 'p2') {
+    for (const e of cur.entries) { if (kindOf(e) !== 'spend') continue; if (e.part != null) { shareSpend += e.amount; sharedTotal += e.full; } else own += e.amount; }
+    for (const e of everyone) {
+      if (e.date > p.end) continue;
+      if (e.date < p.start) break;
+      const k = kindOf(e);
+      if ((k === 'spend' || k === 'invest') && e.cat !== 'settle' && payerOf(e) === person) paidOut += e.amount;
+    }
+  } else if (person === 'joint') {
+    for (const e of cur.entries) { const k = kindOf(e); if (k === 'spend' || k === 'invest') paidBy[payerOf(e)] += e.amount; }
+  }
   const A = {
     key, p, pp, today, person, isCurrent, isFuture, dayIndex, daysLeft,
     spend: cur.spend, income: cur.income, invest: cur.invest, transfer: cur.transfer, count: cur.count,
@@ -346,7 +472,7 @@ function analyze(key, person) {
     avgPerDay: dayIndex ? cur.spend / dayIndex : 0,
     projection, rate, fixedLeft, recurringLeft,
     hist, weekday, weekendRatio: wkDay > 0 ? wkEnd / wkDay : 0, weekdayDays: Math.min(...wCnt),
-    topPlaces, methods: methodList, needs, wants, split, catWho, incomeBy,
+    topPlaces, methods: methodList, needs, wants, split, catWho, incomeBy, people, sharedSpend, ratio: r, own, shareSpend, sharedTotal, paidOut, paidBy,
     unusual, subs, plan,
     budgetTotal: person === 'all' ? b.total : 0, budgetCats: person === 'all' ? b.cats : {},
     entries: cur.entries,
@@ -408,7 +534,7 @@ function detectRepeating(list, rules, today) {
 function buildInsights(A) {
   const out = [];
   const add = (score, tone, icon, title, body, action) => out.push({ score, tone, icon, title, body, action });
-  const mon = A.isCurrent ? 'this month' : 'in ' + periodLabel(A.p);
+  const mon = A.isCurrent ? 'this ' + cycleWord() : 'in ' + periodLabel(A.p);
   if (!A.count && !A.total && !A.plan) return out;
   const P = A.plan;
   if (P && A.isCurrent) {
@@ -419,16 +545,16 @@ function buildInsights(A) {
     for (const r of P.incomes) if (r.state === 'late') add(58, 'info', 'clock', r.name + ' hasn’t come in yet', 'Expected ' + money(r.amount) + ' on ' + shortDate(r.due) + (r.who !== 'joint' ? ' for ' + memberName(r.who) : '') + '.', { act: 'plan-pay', arg: r.id, label: 'Mark received' });
     if (P.flexible > 0 && A.dayIndex >= 3) {
       if (A.everydayProjected > P.flexible * 1.02) add(92, 'warn', 'trend', 'Everyday spending is heading ' + moneyR(A.everydayProjected - P.flexible) + ' over plan', 'At this pace it ends near ' + money(niceRound(A.everydayProjected)) + ' against ' + money(P.flexible) + ' planned. Keeping to ' + moneyR(Math.max(0, P.flexLeft) / Math.max(1, A.daysLeft + 1)) + ' a day gets you back on plan.');
-      else add(52, 'good', 'check', moneyR(Math.max(0, P.flexLeft)) + ' safe to spend', 'About ' + moneyR(Math.max(0, P.flexLeft) / Math.max(1, A.daysLeft + 1)) + ' a day for the rest of the month, with every planned bill and the saving goal covered.');
+      else add(52, 'good', 'check', moneyR(Math.max(0, P.flexLeft)) + ' safe to spend', 'About ' + moneyR(Math.max(0, P.flexLeft) / Math.max(1, A.daysLeft + 1)) + ' a day for the rest of the ' + cycleWord() + ', with every planned bill and the saving goal covered.');
     }
     if (P.save > 0) {
-      if (A.projectedSave >= P.save) add(48, 'good', 'piggy', 'On track to save ' + moneyR(A.projectedSave), 'Your goal is ' + money(P.save) + ' this month.');
+      if (A.projectedSave >= P.save) add(48, 'good', 'piggy', 'On track to save ' + moneyR(A.projectedSave), 'The goal is ' + money(P.save) + ' this ' + cycleWord() + '.');
       else add(66, 'warn', 'piggy', 'Saving goal at risk', 'You are on course to save ' + moneyR(Math.max(0, A.projectedSave)) + ' against a goal of ' + money(P.save) + '.');
     }
   } else if (A.budgetTotal) {
     const left = A.budgetTotal - A.spend;
     if (left < 0) add(100, 'bad', 'alert', 'Over budget by ' + money(-left), 'You have spent ' + money(A.spend) + ' of your ' + money(A.budgetTotal) + ' budget ' + mon + '.');
-    else if (A.isCurrent && A.dayIndex >= 3 && A.projection > A.budgetTotal * 1.02) add(90, 'warn', 'trend', 'Heading ' + moneyR(A.projection - A.budgetTotal) + ' over budget', 'At your current pace this month ends near ' + money(niceRound(A.projection)) + '. Keeping to ' + moneyR(Math.max(0, left / Math.max(1, A.daysLeft + 1))) + ' a day gets you back under.');
+    else if (A.isCurrent && A.dayIndex >= 3 && A.projection > A.budgetTotal * 1.02) add(90, 'warn', 'trend', 'Heading ' + moneyR(A.projection - A.budgetTotal) + ' over budget', 'At your current pace this ' + cycleWord() + ' ends near ' + money(niceRound(A.projection)) + '. Keeping to ' + moneyR(Math.max(0, left / Math.max(1, A.daysLeft + 1))) + ' a day gets you back under.');
     else if (A.isCurrent && A.dayIndex >= 3) add(50, 'good', 'check', 'On track for your budget', 'Projected ' + money(niceRound(A.projection)) + ' by month end, ' + moneyR(A.budgetTotal - A.projection) + ' under. You can spend about ' + moneyR(left / Math.max(1, A.daysLeft + 1)) + ' a day.');
   } else if (A.person === 'all' && A.priorCount >= 1 && A.avgSpend > 0) {
     add(42, 'info', 'target', 'Plan your month', 'You usually spend about ' + money(niceRound(A.avgSpend)) + ' a month. Add your income and fixed costs to see what is safe to spend.', { act: 'tab', arg: 'plan', label: 'Open plan' });
@@ -463,10 +589,14 @@ function buildInsights(A) {
     else if (A.savingsRate >= 0.2) add(55, 'good', 'piggy', 'You kept ' + pct(A.savingsRate) + ' of your income', money(A.saved) + ' not spent ' + mon + (A.invest ? ', including ' + money(A.invest) + ' invested' : '') + '. The usual target is 20% or more.');
     else add(60, 'warn', 'piggy', 'Saving ' + pct(A.savingsRate) + ' of income so far', 'The common target is 20%. That would mean keeping about ' + moneyR(A.income * 0.2 - A.saved) + ' more ' + mon + '.');
   }
-  if (A.person === 'all' && !household().solo && A.spend > 0) {
-    const s = A.split, j = s.joint.spend / A.spend;
-    const m = members();
-    if (s.p1.spend + s.p2.spend > 0) add(34, 'info', 'people', 'Shared costs are ' + pct(j) + ' of spending', m[0].name + ' ' + money(s.p1.spend) + ', ' + m[1].name + ' ' + money(s.p2.spend) + ' and ' + money(s.joint.spend) + ' shared ' + mon + '.', { act: 'tab', arg: 'insights', label: 'See the split' });
+  if (!household().solo && A.person !== 'joint') {
+    const b = balanceNow();
+    if (b && b.amount >= 1 && (A.person === 'all' || A.person === b.from || A.person === b.to)) add(73, 'info', 'people', memberName(b.from) + ' owes ' + memberName(b.to) + ' ' + money(b.amount), 'For shared costs and things paid for each other, across everything logged. Settling up records the payment and clears it.', { act: 'settle', arg: '', label: 'Settle up' });
+  }
+  if (A.person === 'all' && A.people && A.people.p1 && A.spend > 0) {
+    const P = A.people, a = memberName('p1'), c = memberName('p2');
+    if (P.p1.rate != null && P.p2.rate != null) add(40, 'info', 'people', a + ' kept ' + pct(Math.max(0, P.p1.rate)) + ', ' + c + ' kept ' + pct(Math.max(0, P.p2.rate)), a + ' earned ' + money(Math.round(P.p1.earned)) + ' and spent ' + money(Math.round(P.p1.spent)) + '; ' + c + ' earned ' + money(Math.round(P.p2.earned)) + ' and spent ' + money(Math.round(P.p2.spent)) + ' ' + mon + ', shared costs split ' + splitLabel() + '.', { act: 'tab', arg: 'insights', label: 'Compare' });
+    if (A.sharedSpend > 0) add(34, 'info', 'people', 'Shared costs are ' + pct(A.sharedSpend / A.spend) + ' of spending', money(Math.round(A.sharedSpend)) + ' shared ' + mon + ': ' + a + ' paid ' + money(Math.round(P.p1.paidShared)) + ' of it and ' + c + ' ' + money(Math.round(P.p2.paidShared)) + '.');
   }
   if (A.unusual) {
     const e = A.unusual.e, cat = catById(e.cat);
@@ -487,6 +617,8 @@ function buildInsights(A) {
   }
   return out.sort((a, b) => b.score - a.score);
 }
+/* "month" for calendar months, "cycle" when the month runs from salary day to salary day */
+function cycleWord() { return settings().startDay === 1 ? 'month' : 'cycle'; }
 function niceRound(v) {
   if (v <= 0) return 0;
   const p = Math.pow(10, Math.max(0, Math.floor(Math.log10(v)) - 1));
@@ -508,10 +640,12 @@ function buildDigest(A) {
   const L = [];
   const h = household();
   L.push('Today: ' + A.today + '. Currency: ' + FMT.cur + '. Budget months start on day ' + settings().startDay + '.');
-  if (!h.solo) L.push('Household: ' + h.members.map(m => m.name).join(' and ') + '. Entries belong to one of them or are Shared.' + (A.person !== 'all' ? ' This summary covers ' + memberName(A.person) + ' only.' : ''));
+  if (!h.solo) L.push('Household: ' + h.members.map(m => m.name).join(' and ') + ', who keep separate incomes. Every expense records who paid and who it is for (one of them, or both). Shared costs are split ' + splitLabel() + ' (' + h.members[0].name + ' first).' + (A.person === 'joint' ? ' This summary covers shared money only.' : A.person !== 'all' ? ' This summary covers ' + memberName(A.person) + ' only: their own spending plus their share of shared costs, and their own income plus their share of shared income.' : ''));
   L.push('Selected period: ' + A.p.start + ' to ' + A.p.end + (A.isCurrent ? ' (day ' + A.dayIndex + ' of ' + A.p.days + ')' : '') + '.');
   L.push('This period: spent ' + n(A.spend) + ', income ' + n(A.income) + ', invested ' + n(A.invest) + ', transfers and card bills (not spending) ' + n(A.transfer) + ', entries ' + A.count + '.' + (A.isCurrent ? ' Projected spending by period end: ' + n(A.projection) + '.' : ''));
-  if (A.person === 'all' && !h.solo) L.push('By person this period (spent / income): ' + ['p1', 'p2', 'joint'].map(w => memberName(w) + ' ' + n(A.split[w].spend) + ' / ' + n(A.split[w].income)).join('; ') + '.');
+  if (A.person === 'all' && A.people && A.people.p1) L.push('Each person this period: ' + ['p1', 'p2'].map(w => { const P = A.people[w]; return memberName(w) + ' earned ' + n(P.earned) + ', spent ' + n(P.spent) + ' (own ' + n(P.own) + ' + share of shared ' + n(P.shared) + '), invested ' + n(P.invested) + ', saved ' + n(P.saved) + ', paid out of pocket ' + n(P.paid) + ' (of which shared costs ' + n(P.paidShared) + ')'; }).join('; ') + '. Shared spending this period: ' + n(A.sharedSpend) + '.');
+  if (!h.solo) { const b = balanceNow(); if (b) L.push(b.amount ? 'Balance across everything logged: ' + memberName(b.from) + ' owes ' + memberName(b.to) + ' ' + n(b.amount) + '.' : 'Balance across everything logged: all square.'); }
+  if (A.person === 'p1' || A.person === 'p2') L.push(memberName(A.person) + ' this period: own spending ' + n(A.own) + ', share of shared costs ' + n(A.shareSpend) + ' (of ' + n(A.sharedTotal) + ' shared), money that left their pocket ' + n(A.paidOut) + '.');
   L.push('Previous period: spent ' + n(A.prevSpend) + ', income ' + n(A.prevIncome) + (A.isCurrent ? ', spent by the same day: ' + n(A.prevToDate) : '') + '.');
   const cats = Array.from(A.byCat.entries()).filter(([, v]) => v.kind !== 'income').sort((a, b) => b[1].total - a[1].total).slice(0, 14)
     .map(([id, v]) => catById(id).name + ' ' + n(v.total) + ' (prev ' + n((A.prevByCat.get(id) || { total: 0 }).total) + ', 3-mo avg ' + n(A.avgCat.get(id) || 0) + ')');

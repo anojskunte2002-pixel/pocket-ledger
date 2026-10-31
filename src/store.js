@@ -40,6 +40,7 @@ function normEntry(id, e) {
     source: String(e.source || 'text'),
     rec: e.rec ? String(e.rec) : '',
     who: e.who ? String(e.who).slice(0, 20) : '',
+    paid: e.paid === 'p1' || e.paid === 'p2' ? e.paid : '',
     by: e.by ? String(e.by).slice(0, 20) : '',
     plan: e.plan ? String(e.plan).slice(0, 40) : '',
     sample: !!e.sample,
@@ -48,7 +49,7 @@ function normEntry(id, e) {
   };
 }
 function entryToDoc(e) {
-  return { type: e.type, amount: e.amount, cat: e.cat, date: e.date, note: e.note, merchant: e.merchant, method: e.method, tags: e.tags, source: e.source, rec: e.rec, who: e.who, by: e.by, plan: e.plan, sample: e.sample, created: e.created, updated: e.updated };
+  return { type: e.type, amount: e.amount, cat: e.cat, date: e.date, note: e.note, merchant: e.merchant, method: e.method, tags: e.tags, source: e.source, rec: e.rec, who: e.who, paid: e.paid, by: e.by, plan: e.plan, sample: e.sample, created: e.created, updated: e.updated };
 }
 
 function storeOnChange(fn) { Store.listeners.add(fn); }
@@ -300,14 +301,16 @@ async function wipeAll() {
 }
 
 /* ---------- per-person preferences: which member you are, your background ---------- */
-const Prefs = { me: '', scene: '', motion: true, fx: 'full', loaded: false };
+const Prefs = { me: '', scene: '', motion: true, fx: 'frosted', loaded: false };
 function sanitizePrefs(p) {
   const out = {};
   if (!p || typeof p !== 'object') return out;
   if (typeof p.me === 'string' && /^(?:p1|p2)$/.test(p.me)) out.me = p.me;
   if (typeof p.scene === 'string' && /^[a-z]{2,20}$/.test(p.scene)) out.scene = p.scene;
   if (typeof p.motion === 'boolean') out.motion = p.motion;
-  if (p.fx === 'full' || p.fx === 'frosted' || p.fx === 'saver') out.fx = p.fx;
+  // edge refraction ("liquid") is opt-in: it is heavy on phones. The old default "full" reads as frosted.
+  if (p.fx === 'liquid' || p.fx === 'frosted' || p.fx === 'saver') out.fx = p.fx;
+  else if (p.fx === 'full') out.fx = 'frosted';
   return out;
 }
 function loadLocalPrefs() { Object.assign(Prefs, sanitizePrefs(lsGet('prefs'))); }

@@ -55,7 +55,7 @@ function openEditor(src, opts) {
   const existing = src && src.id && Store.entries.get(src.id);
   const base = { type: 'expense', amount: 0, cat: '', date: todayStr(), note: '', merchant: '', method: '', repeat: '', tags: [], who: '' };
   const d = Object.assign(base, JSON.parse(JSON.stringify(existing || src || {})));
-  d.who = existing ? whoOf(existing) : (d.who || defaultWhoFor(d.cat));
+  if (existing) { d.who = whoOf(existing); d.paid = payerOf(existing); } else { const pp = entryPeople(d); d.who = pp.who; d.paid = pp.paid; }
   ED = { isNew: !existing, orig: existing || null, d, autoCat: d.cat, catTouched: false, whoTouched: !!(src && src.who), foreign: opts.foreign || '', source: d.source || 'manual', raw: opts.raw || '' };
   openSheet(editorHTML(), { label: ED.isNew ? 'New entry' : 'Edit entry', onMount: bindEditor });
 }
@@ -72,7 +72,7 @@ function editorHTML() {
     '<p class="calc" id="ed-calc">Sums work too, like 120+80.</p>' +
     '<label class="field"><span>What was it?</span><input id="ed-note" maxlength="120" autocomplete="off" value="' + esc(d.note) + '" placeholder="Coffee with Sam"></label>' +
     '<div class="field"><span>Category</span><div class="cat-grid" id="ed-cats">' + catGridHTML(d.type, d.cat) + '</div></div>' +
-    (household().solo ? '' : '<div class="field"><span>Whose money</span><div class="who-pick" id="ed-who" role="radiogroup" aria-label="Whose money">' + whoPickHTML('ed-who', d.who) + '</div></div>') +
+    '<div id="ed-people">' + edPeopleHTML(d) + '</div>' +
     '<div class="row2"><label class="field"><span>Date</span><input type="date" id="ed-date" value="' + esc(d.date) + '"></label>' +
     '<label class="field"><span>Place or person</span><input id="ed-merchant" maxlength="60" autocomplete="off" value="' + esc(d.merchant) + '" placeholder="Optional"></label></div>' +
     '<div class="field"><span>Paid with</span><div class="chips" id="ed-methods">' + METHODS.map(m => '<button type="button" class="chip-btn" data-act="ed-method" data-arg="' + esc(m) + '" aria-pressed="' + (d.method === m) + '">' + esc(m) + '</button>').join('') + '</div></div>' +
@@ -90,7 +90,7 @@ function bindEditor(sheet) {
     const v = evalAmount(amt.value);
     calc.textContent = /[+*/x×()]|\d-\d/.test(amt.value) && v ? '= ' + money(v) : 'Sums work too, like 120+80.';
   };
-  amt.addEventListener('input', show);
+  amt.addEventListener('input', () => { show(); const n = $('#ed-split'); if (n) { ED.d.amount = evalAmount(amt.value); n.textContent = splitNote(ED.d); } });
   for (const id of ['#ed-amount', '#ed-note', '#ed-merchant', '#ed-tags']) $(id, sheet).addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); editorSave(); } });
 }
 function readEditor() {
@@ -125,7 +125,8 @@ async function editorSave() {
   } else {
     const prev = ED.orig;
     closeSheet();
-    await updateEntry(prev, { type: d.type, amount: d.amount, cat: d.cat, date: d.date, note: d.note, merchant: d.merchant, method: d.method, tags: d.tags, who: d.who || prev.who });
+    const pp = entryPeople(d);
+    await updateEntry(prev, { type: d.type, amount: d.amount, cat: d.cat, date: d.date, note: d.note, merchant: d.merchant, method: d.method, tags: d.tags, who: pp.who, paid: pp.paid });
   }
 }
 
@@ -408,7 +409,7 @@ function openSettings() {
     '<section class="set-sec"><h3>Where your data lives</h3><p class="store-line">' + storageLine() + '</p></section>' +
     '<section class="set-sec"><h3>Money</h3>' +
     '<label class="field"><span>Currency</span><select id="set-cur">' + curs.map(c => '<option value="' + c + '"' + (c === s.currency ? ' selected' : '') + '>' + c + (dn ? ' · ' + esc(dn.of(c) || '') : '') + '</option>').join('') + '</select><small>Changing it relabels amounts. It doesn’t convert them.</small></label>' +
-    '<label class="field"><span>Budget month starts on</span><select id="set-sd">' + Array.from({ length: 28 }, (x, i) => i + 1).map(n => '<option value="' + n + '"' + (n === s.startDay ? ' selected' : '') + '>' + (n === 1 ? 'the 1st (calendar month)' : 'the ' + ord(n)) + '</option>').join('') + '</select><small>Pick your payday if you budget from salary to salary.</small></label>' +
+    '<label class="field"><span>Each cycle starts on (salary day)</span><select id="set-sd">' + Array.from({ length: 31 }, (x, i) => i + 1).map(n => '<option value="' + n + '"' + (n === s.startDay ? ' selected' : '') + '>' + (n === 1 ? 'the 1st (calendar month)' : 'the ' + ord(n) + (n >= 29 ? ' (or the month’s last day)' : '')) + '</option>').join('') + '</select><small>Your month runs from one salary to the next, so spending, plans and savings line up with your pay.</small></label>' +
     '<label class="field"><span>A date like 05/10 means</span><select id="set-do"><option value="DMY"' + (s.dateOrder === 'DMY' ? ' selected' : '') + '>5 October (day first)</option><option value="MDY"' + (s.dateOrder === 'MDY' ? ' selected' : '') + '>May 10 (month first)</option></select></label></section>' +
     '<section class="set-sec"><h3>Smart entry</h3>' +
     '<label class="switch"><input type="checkbox" id="set-ai"' + (s.ai !== 'off' ? ' checked' : '') + '><span>Let Claude read tricky entries, receipts and your questions<br><small class="muted">Uses your own Claude plan. Simple entries like “coffee 120” are understood right here without it.' + (AI.ok ? '' : ' Claude isn’t available in this view.') + '</small></span></label>' +
@@ -599,8 +600,22 @@ async function openPermissions() {
 }
 
 /* ---------- people: whose money, who added it ---------- */
-function whoPickHTML(act, sel) {
-  return ['p1', 'p2', 'joint'].map(w => '<button type="button" class="who-opt" role="radio" data-act="' + act + '" data-arg="' + w + '" aria-checked="' + (w === sel) + '">' + avatarHTML(w) + '<span>' + esc(memberName(w)) + '</span></button>').join('');
+function whoPickHTML(act, sel, ids, bothLabel) {
+  return (ids || ['p1', 'p2', 'joint']).map(w => '<button type="button" class="who-opt" role="radio" data-act="' + act + '" data-arg="' + w + '" aria-checked="' + (w === sel) + '">' + avatarHTML(w) + '<span>' + esc(w === 'joint' ? (bothLabel || 'Shared') : memberName(w)) + '</span></button>').join('');
+}
+/* the editor's two questions: who paid, and who it was for */
+function edPeopleHTML(d) {
+  if (household().solo) return '';
+  if (d.type === 'income') return '<div class="field"><span>Whose income</span><div class="who-pick" role="radiogroup" aria-label="Whose income">' + whoPickHTML('ed-for', d.who) + '</div></div>';
+  return '<div class="field"><span>Paid by</span><div class="who-pick" role="radiogroup" aria-label="Paid by">' + whoPickHTML('ed-paid', d.paid, ['p1', 'p2']) + '</div></div>' +
+    '<div class="field"><span>For</span><div class="who-pick" role="radiogroup" aria-label="Who it was for">' + whoPickHTML('ed-for', d.who, null, 'Both') + '</div><small id="ed-split">' + esc(splitNote(d)) + '</small></div>';
+}
+function splitNote(d) {
+  if (household().solo || d.type === 'income') return '';
+  const a = +d.amount || 0, r = shareRatio();
+  if (d.who === 'joint') return 'Split ' + splitLabel() + (a ? ': ' + memberName('p1') + ' ' + moneyR(a * r) + ', ' + memberName('p2') + ' ' + moneyR(a * (1 - r)) : '') + '. ' + memberName(d.paid) + ' is owed the other share.';
+  if (d.who !== d.paid) return memberName(d.who) + ' owes ' + memberName(d.paid) + (a ? ' ' + money(a) : ' this') + '.';
+  return memberName(d.who) + '’s own spending.';
 }
 function setPicked(sel, arg, attr) { for (const b of $$(sel)) b.setAttribute(attr || 'aria-checked', String(b.dataset.arg === arg)); }
 const SOURCE_WORD = { text: 'typed', voice: 'spoken', receipt: 'read from a receipt', sms: 'from a bank message', csv: 'from a statement', recurring: 'added automatically', plan: 'from the plan', manual: 'filled in by hand', import: 'imported' };
@@ -616,15 +631,24 @@ function byLineHTML(e) {
 let HH = null;
 function openHousehold() {
   const h = household();
-  HH = { two: h.setup ? !h.solo : true, n1: h.members[0] ? h.members[0].name : '', n2: h.members[1] ? h.members[1].name : '', me: meId(), shared: h.sharedDefault };
+  HH = { two: h.setup ? !h.solo : true, n1: h.members[0] ? h.members[0].name : '', n2: h.members[1] ? h.members[1].name : '', me: meId(), mode: h.splitMode, split: h.split, cats: new Set(h.sharedCats) };
   if (Store.meta.household && Store.meta.household.sample) { HH.n1 = ''; HH.n2 = ''; }
   openSheet(sheetHead('Your household') + '<div class="sh-body" id="hh-body"></div><footer class="sh-foot"><span class="spacer"></span><button type="button" class="btn" data-act="close-sheet">Cancel</button><button type="button" class="btn primary" data-act="hh-save">Save</button></footer>', { label: 'Household', onMount: renderHousehold });
 }
 function hhName(id) { return (id === 'p1' ? HH.n1 : HH.n2).trim() || (id === 'p1' ? 'First person' : 'Second person'); }
+function splitFieldHTML() {
+  const inc = getPlan().incomes, a = sum(inc.filter(x => x.who === 'p1'), x => x.amount), b = sum(inc.filter(x => x.who === 'p2'), x => x.amount);
+  const byInc = a + b > 0 ? Math.round(a / (a + b) * 100) : 0;
+  let h = '<div class="field"><span>Split shared costs</span><div class="seg full" role="radiogroup" aria-label="Split shared costs">' +
+    [['equal', 'Equally'], ['income', 'By income'], ['custom', 'Custom']].map(o => '<button type="button" role="radio" data-act="hh-mode" data-arg="' + o[0] + '" aria-checked="' + (HH.mode === o[0]) + '">' + o[1] + '</button>').join('') + '</div>';
+  if (HH.mode === 'custom') h += '<select id="hh-pct" aria-label="Split" style="margin-top:8px">' + Array.from({ length: 17 }, (x, i) => 10 + i * 5).map(v => '<option value="' + v + '"' + (Math.round(HH.split * 100) === v ? ' selected' : '') + '>' + esc(hhName('p1')) + ' ' + v + '% · ' + esc(hhName('p2')) + ' ' + (100 - v) + '%</option>').join('') + '</select>';
+  h += '<small>' + (HH.mode === 'income' ? (byInc ? 'From your planned incomes: ' + esc(hhName('p1')) + ' ' + byInc + '%, ' + esc(hhName('p2')) + ' ' + (100 - byInc) + '%. Each pays in proportion to what they earn.' : 'Add both incomes in the plan first; until then it splits equally.') : HH.mode === 'custom' ? 'Pick the split that feels fair to you both.' : 'Shared costs split 50/50, whoever pays.') + '</small></div>';
+  return h;
+}
 function renderHousehold() {
   const body = $('#hh-body');
   if (!body) return;
-  let h = '<p class="sh-lede">Track money together. Every entry knows whose it is and who added it, and you can look at one person or everyone at once.</p>' +
+  let h = '<p class="sh-lede">Track money together. Every expense knows who paid and who it was for, so each of you sees your own earning, spending and saving, and what you owe each other for shared costs.</p>' +
     '<div class="seg full" role="radiogroup" aria-label="How many people" style="margin-top:16px"><button type="button" role="radio" data-act="hh-two" data-arg="0" aria-checked="' + !HH.two + '">Just me</button><button type="button" role="radio" data-act="hh-two" data-arg="1" aria-checked="' + HH.two + '">Two of us</button></div>' +
     '<div class="row2"><label class="field"><span>' + (HH.two ? 'First person' : 'Your name') + '</span><input id="hh-n1" maxlength="24" autocomplete="off" value="' + esc(HH.n1) + '" placeholder="Name"' + (HH.n1 ? '' : ' autofocus') + '></label>' +
     (HH.two ? '<label class="field"><span>Second person</span><input id="hh-n2" maxlength="24" autocomplete="off" value="' + esc(HH.n2) + '" placeholder="Name"></label>' : '') + '</div>';
@@ -632,14 +656,16 @@ function renderHousehold() {
     h += '<div class="field"><span>Who is using ' + (IN_CLAUDE ? 'this account' : 'this device') + '?</span><div class="who-pick" role="radiogroup" aria-label="Who is using this">' +
       ['p1', 'p2'].map(id => '<button type="button" class="who-opt" role="radio" data-act="hh-me" data-arg="' + id + '" aria-checked="' + (HH.me === id) + '"><span class="av ' + id + '">' + esc(initials(hhName(id))) + '</span><span>' + esc(hhName(id)) + '</span></button>').join('') +
       '</div><small>Your new entries count as yours unless you say otherwise. Your background is yours too.</small></div>' +
-      '<label class="switch"><input type="checkbox" id="hh-shared"' + (HH.shared ? ' checked' : '') + '><span>Count rent, groceries and bills as shared<br><small class="muted">Everything else counts as the person’s own. You can change any entry.</small></span></label>' + inviteHTML();
+      splitFieldHTML() +
+      '<div class="field"><span>Usually shared</span><div class="chips" id="hh-cats">' + allCats().filter(c => c.type === 'expense' && !c.hidden && c.group !== 'transfer').map(c => '<button type="button" class="chip-btn" data-act="hh-cat" data-arg="' + esc(c.id) + '" aria-pressed="' + HH.cats.has(c.id) + '">' + esc(c.emoji + ' ' + c.name) + '</button>').join('') + '</div>' +
+      '<small>New entries in these categories count as for both of you. Anything else counts as the payer’s own. You can change any entry.</small></div>' + inviteHTML();
   }
   body.innerHTML = h;
   const sync = () => { for (const b of $$('[data-act="hh-me"]', body)) { const n = hhName(b.dataset.arg); b.firstChild.textContent = initials(n); b.lastChild.textContent = n; } };
-  const i1 = $('#hh-n1', body), i2 = $('#hh-n2', body), sw = $('#hh-shared', body);
+  const i1 = $('#hh-n1', body), i2 = $('#hh-n2', body), pc = $('#hh-pct', body);
   i1.addEventListener('input', () => { HH.n1 = i1.value; sync(); });
   if (i2) i2.addEventListener('input', () => { HH.n2 = i2.value; sync(); });
-  if (sw) sw.addEventListener('change', () => { HH.shared = sw.checked; });
+  if (pc) pc.addEventListener('change', () => { HH.split = +pc.value / 100; });
   for (const i of [i1, i2]) if (i) i.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); householdSave(); } });
 }
 function inviteHTML() {
@@ -661,7 +687,7 @@ async function householdSave() {
   const members = HH.two ? [{ id: 'p1', name: n1 }, { id: 'p2', name: n2 }] : [{ id: 'p1', name: n1 }];
   const before = meId(), me = HH.two ? HH.me : 'p1';
   closeSheet();
-  try { await putMeta('household', { members, sharedDefault: !!HH.shared, sample: false }); } catch (e) { toast(storeErrorText(e)); return; }
+  try { await putMeta('household', { members, sharedCats: Array.from(HH.cats), splitMode: HH.mode, split: HH.split, sample: false }); } catch (e) { toast(storeErrorText(e)); return; }
   await savePrefs({ me });
   if (!Prefs.scene && before !== meId()) applyLook();
   toast(HH.two ? 'Saved. Hello ' + n1 + ' & ' + n2 + '!' : 'Saved. Hello ' + n1 + '!');
@@ -680,8 +706,8 @@ function renderAppearance() {
   body.innerHTML = '<p class="sh-lede">Pick the scene that lives behind your glass. ' + (other ? 'It’s yours alone: ' + esc(other) + ' picks their own.' : 'It drifts slowly and rests when the page is hidden.') + '</p>' +
     '<div class="scene-grid">' + SCENES.map(sc => '<button type="button" class="scene-tile' + (sc.tone === 'light' ? ' lt' : '') + '" data-act="scene" data-arg="' + sc.id + '" aria-pressed="' + (sc.id === cur) + '"><span class="sw" style="background:' + esc(sceneCSS(sc)) + '"></span><b>' + esc(sc.name) + '</b><span class="tick" aria-hidden="true">' + ICON.check + '</span></button>').join('') + '</div>' +
     '<label class="switch"><input type="checkbox" id="look-motion"' + (Prefs.motion ? ' checked' : '') + '><span>Moving background<br><small class="muted">' + (reducedMotion() ? 'Your device asks for less motion, so it stays still.' : 'Slow and gentle. Turn it off to save battery.') + '</small></span></label>' +
-    '<div class="field"><span>Glass</span><div class="seg full" role="radiogroup" aria-label="Glass effect">' + [['full', 'Liquid'], ['frosted', 'Frosted'], ['saver', 'Battery saver']].map(o => '<button type="button" role="radio" data-act="fx" data-arg="' + o[0] + '" aria-checked="' + (Prefs.fx === o[0]) + '">' + o[1] + '</button>').join('') + '</div>' +
-    '<small>' + (refractSupported() ? 'Liquid bends light at the edge of every panel.' : 'Liquid refraction needs Chrome or Edge. Here it looks frosted.') + ' Battery saver uses solid panels and a still background.</small></div>';
+    '<div class="field"><span>Glass</span><div class="seg full" role="radiogroup" aria-label="Glass effect">' + [['frosted', 'Frosted'], ['liquid', 'Liquid'], ['saver', 'Battery saver']].map(o => '<button type="button" role="radio" data-act="fx" data-arg="' + o[0] + '" aria-checked="' + (Prefs.fx === o[0]) + '">' + o[1] + '</button>').join('') + '</div>' +
+    '<small>' + (refractSupported() ? 'Liquid also bends light at the edge of each panel. It looks lovely but works the phone harder.' : 'Liquid refraction needs Chrome or Edge; here it looks frosted.') + ' Battery saver uses solid panels and a still background.</small></div>';
   $('#look-motion', body).addEventListener('change', ev => { savePrefs({ motion: ev.target.checked }); applyLook(); });
 }
 
@@ -693,7 +719,7 @@ function openPlanEditor(kind, id, preset) {
   if (id && !it) return;
   kind = it ? it.kind : (kind === 'income' ? 'income' : 'fixed');
   const d = it ? Object.assign({}, it) : Object.assign({ id: '', kind, name: '', who: '', cat: kind === 'income' ? 'salary' : 'home', amount: 0, day: 1, auto: false }, preset || {});
-  if (!d.who) d.who = solo ? 'p1' : kind === 'income' ? meId() : (SHARED_CATS.has(d.cat) ? 'joint' : meId());
+  if (!d.who) d.who = solo ? 'p1' : kind === 'income' ? meId() : (isSharedCat(d.cat) ? 'joint' : meId());
   PE = { isNew: !it, d, whoTouched: !!it };
   const type = kind === 'income' ? 'income' : 'expense';
   const title = it ? (kind === 'income' ? 'Edit income' : 'Edit fixed cost') : (kind === 'income' ? 'Money coming in' : 'A fixed cost');
@@ -731,21 +757,24 @@ async function planEditorSave() {
   materializePlan();
 }
 function openGoalEditor() {
-  const plan = getPlan(), A = analyze(UI.period, 'all');
-  const inc = A.plan ? A.plan.baseIncome : A.income;
-  const sug = inc > 0 ? niceRound(inc * 0.2) : 0;
-  openSheet(sheetHead('Saving goal') + '<div class="sh-body"><p class="sh-lede">How much do you want to keep each month? It’s set aside before your everyday money is worked out.' + (sug ? ' A common target is a fifth of income, about <b>' + esc(money(sug)) + '</b>.' : '') + '</p>' +
-    '<label class="amt-field"><span class="cur" aria-hidden="true">' + esc(curSymbol()) + '</span><span class="sr">Saving goal each month</span><input id="goal-amt" inputmode="decimal" autocomplete="off" placeholder="' + (sug || 0) + '" value="' + (plan.save ? esc(String(plan.save)) : '') + '" autofocus></label>' +
-    (sug ? '<div class="chips" style="margin-top:14px">' + [0.1, 0.2, 0.3].map(f => '<button type="button" class="chip-btn" data-act="goal-pick" data-arg="' + niceRound(inc * f) + '">' + pct(f) + ' · ' + esc(compact(niceRound(inc * f))) + '</button>').join('') + '</div>' : '') +
-    '</div><footer class="sh-foot">' + (plan.save ? '<button type="button" class="btn ghost danger" data-act="goal-remove">Remove</button>' : '') + '<span class="spacer"></span><button type="button" class="btn" data-act="close-sheet">Cancel</button><button type="button" class="btn primary" data-act="goal-save">Save</button></footer>', {
-    label: 'Saving goal', onMount: sh => $('#goal-amt', sh).addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); goalSave(); } })
+  const g = getPlan().saveBy, A = analyze(UI.period, 'all'), P = A.plan, solo = household().solo, r = shareRatio();
+  const inc = w => (P ? sum(P.incomes.filter(x => x.who === w), x => x.amount) + sum(P.incomes.filter(x => x.who === 'joint'), x => x.amount * (w === 'p1' ? r : 1 - r)) : 0) || (solo ? A.income : 0);
+  const field = w => {
+    const base = inc(w), sug = base > 0 ? niceRound(base * 0.2) : 0;
+    return '<div class="field"><span>' + (solo ? 'Keep each cycle' : esc(memberName(w)) + ' keeps each cycle') + '</span>' +
+      '<label class="amt-field" style="margin-top:0"><span class="cur" aria-hidden="true">' + esc(curSymbol()) + '</span><span class="sr">Saving goal</span><input id="goal-' + w + '" inputmode="decimal" autocomplete="off" placeholder="' + (sug || 0) + '" value="' + (g[w] ? esc(String(g[w])) : '') + '"></label>' +
+      (base > 0 ? '<div class="chips" style="margin-top:10px">' + [0.1, 0.2, 0.3].map(f => '<button type="button" class="chip-btn" data-act="goal-pick" data-arg="' + w + ':' + niceRound(base * f) + '">' + pct(f) + ' · ' + esc(compact(niceRound(base * f))) + '</button>').join('') + '</div>' : '') + '</div>';
+  };
+  openSheet(sheetHead(solo ? 'Saving goal' : 'Saving goals') + '<div class="sh-body"><p class="sh-lede">' + (solo ? 'How much do you want to keep each cycle?' : 'Each of you keeps your own savings. How much should each keep each cycle?') + ' It’s set aside before everyday money is worked out. A common target is a fifth of income.</p>' +
+    (solo ? field('p1') : field('p1') + field('p2')) + '</div><footer class="sh-foot"><span class="spacer"></span><button type="button" class="btn" data-act="close-sheet">Cancel</button><button type="button" class="btn primary" data-act="goal-save">Save</button></footer>', {
+    label: 'Saving goals', onMount: sh => { for (const i of $$('input', sh)) i.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); goalSave(); } }); }
   });
 }
 async function goalSave() {
-  const v = evalAmount($('#goal-amt').value);
-  if (!(v > 0)) { $('#goal-amt').focus(); return; }
+  const goals = {};
+  for (const w of ['p1', 'p2']) { const i = $('#goal-' + w); if (i) goals[w] = evalAmount(i.value); }
   closeSheet();
-  try { await setPlanSave(v); toast('Saving goal set to ' + money(v) + ' a month'); } catch (e) { toast(storeErrorText(e)); }
+  try { await setPlanSave(goals); toast('Saving goals saved'); } catch (e) { toast(storeErrorText(e)); }
 }
 function openPlanItem(id) {
   const A = analyze(UI.period, 'all'), P = A.plan;
@@ -758,7 +787,9 @@ function openPlanItem(id) {
     '<p class="sh-lede" style="margin-top:14px">' + esc(catById(r.cat, income ? 'income' : 'expense').name + (household().solo ? '' : ' · ' + memberName(r.who)) + ' · the ' + ordinal(r.day) + ' of every month' + (r.auto ? ' · logs itself' : '')) + '</p>' +
     (r.entries.length ? '<p class="lbl-s" style="margin-top:16px">Logged in ' + esc(periodLabel(A.p)) + '</p><div class="pi-entries list" style="border-radius:18px;background:var(--fill);margin-top:6px">' + r.entries.map(rowHTML).join('') + '</div>' : '<p class="cc-sub" style="margin-top:12px">Nothing logged for it in ' + esc(periodLabel(A.p)) + ' yet.</p>') +
     '</div><footer class="sh-foot"><button type="button" class="btn" data-act="plan-edit" data-arg="' + esc(r.id) + '">Edit</button><span class="spacer"></span>' +
-    (r.state === 'done' ? '<button type="button" class="btn" data-act="close-sheet">Close</button>' : '<button type="button" class="btn primary" data-act="plan-pay" data-arg="' + esc(r.id) + '">' + (r.state === 'partial' ? 'Log the rest' : 'Mark ' + doneWord.toLowerCase()) + '</button>') + '</footer>', { label: r.name });
+    (r.state === 'done' ? '<button type="button" class="btn" data-act="close-sheet">Close</button>' : r.who === 'joint' && !income && !household().solo
+      ? ['p1', 'p2'].map(w => '<button type="button" class="btn' + (w === meId() ? ' primary' : '') + '" data-act="plan-pay" data-arg="' + esc(r.id) + '|' + w + '">' + esc(memberName(w)) + ' paid</button>').join('')
+      : '<button type="button" class="btn primary" data-act="plan-pay" data-arg="' + esc(r.id) + '">' + (r.state === 'partial' ? 'Log the rest' : 'Mark ' + doneWord.toLowerCase()) + '</button>') + '</footer>', { label: r.name });
 }
 
 /* fill the plan in from what already repeats in the ledger */
@@ -797,8 +828,10 @@ function planSuggestions() {
     if (x.amount > 0 && !known(x)) out.push(x);
   }
   out.sort((a, b) => (a.kind === b.kind ? b.amount - a.amount : a.kind === 'income' ? -1 : 1));
-  const incomeSum = sum(plan.incomes, x => x.amount) + sum(out.filter(x => x.kind === 'income'), x => x.amount);
-  return { items: out.slice(0, 16), save: !plan.save && incomeSum > 0 ? niceRound(incomeSum * 0.2) : 0 };
+  const r = shareRatio(), incs = plan.incomes.concat(out.filter(x => x.kind === 'income'));
+  const incomeOf = w => sum(incs.filter(x => x.who === w), x => x.amount) + sum(incs.filter(x => x.who === 'joint'), x => x.amount * (w === 'p1' ? r : 1 - r));
+  const save = { p1: !plan.saveBy.p1 && incomeOf('p1') > 0 ? niceRound(incomeOf('p1') * 0.2) : 0, p2: !household().solo && !plan.saveBy.p2 && incomeOf('p2') > 0 ? niceRound(incomeOf('p2') * 0.2) : 0 };
+  return { items: out.slice(0, 16), save };
 }
 function openPlanSuggest() {
   PS = planSuggestions();
@@ -809,8 +842,9 @@ function openPlanSuggest() {
   let h = '<p class="sh-lede">Here is what repeats in your entries. Untick anything that isn’t a monthly regular, and change the rest any time.</p>';
   if (inc.length) h += '<p class="lbl-s" style="margin-top:16px">Money in</p>' + inc.map(p => row(p[0], p[1])).join('');
   if (fix.length) h += '<p class="lbl-s" style="margin-top:16px">Fixed costs</p>' + fix.map(p => row(p[0], p[1])).join('');
-  if (PS.save) h += '<p class="lbl-s" style="margin-top:16px">Saving goal</p><label class="list-row" style="cursor:pointer"><span style="display:flex;gap:10px;align-items:center"><input type="checkbox" data-ps="save" checked style="width:18px;height:18px;accent-color:var(--accent)">A fifth of what comes in</span><b>' + esc(money(PS.save)) + '</b></label>';
-  const any = PS.items.length || PS.save;
+  const goals = ['p1', 'p2'].filter(w => PS.save[w] > 0);
+  if (goals.length) h += '<p class="lbl-s" style="margin-top:16px">Saving goals, a fifth of income</p>' + goals.map(w => '<label class="list-row" style="cursor:pointer"><span style="display:flex;gap:10px;align-items:center"><input type="checkbox" data-ps="save-' + w + '" checked style="width:18px;height:18px;accent-color:var(--accent)">' + (solo ? 'Each cycle' : avatarHTML(w, 'xs') + esc(memberName(w))) + '</span><b>' + esc(money(PS.save[w])) + '</b></label>').join('');
+  const any = PS.items.length || goals.length;
   if (!any) h += '<p class="note-box">Nothing repeats often enough yet. Add your income and fixed costs yourself, or come back after a month of entries.</p>';
   openSheet(sheetHead('Fill in the plan') + '<div class="sh-body">' + h + '</div><footer class="sh-foot"><span class="spacer"></span><button type="button" class="btn" data-act="close-sheet">' + (any ? 'Cancel' : 'Close') + '</button>' + (any ? '<button type="button" class="btn primary" data-act="ps-apply">Add to plan</button>' : '') + '</footer>', { label: 'Fill in the plan' });
 }
@@ -818,11 +852,28 @@ async function planSuggestApply() {
   const p = planRaw();
   for (const el of $$('[data-ps]')) {
     if (!el.checked) continue;
-    if (el.dataset.ps === 'save') { p.save = PS.save; continue; }
+    if (/^save-/.test(el.dataset.ps)) { const w = el.dataset.ps.slice(5); p.save[w] = PS.save[w]; continue; }
     const x = PS.items[+el.dataset.ps];
     if (x) (x.kind === 'income' ? p.incomes : p.fixed).push(Object.assign({ id: uid(x.kind === 'income' ? 'i' : 'f') }, x));
   }
   p.sample = false;
   closeSheet();
   try { await savePlan(p); toast('Plan filled in. Tap any line to fine-tune it.'); } catch (e) { toast(storeErrorText(e)); }
+}
+
+/* ---------- settle up: who owes whom, cleared with one recorded payment ---------- */
+function openSettle() {
+  const b = balanceNow();
+  if (!b || !b.amount) { toast('You two are all square'); return; }
+  openSheet(sheetHead('Settle up') + '<div class="sh-body"><div class="settle-hero">' + avatarHTML(b.from, 'lg') + '<span class="arrow" aria-hidden="true">' + ICON.send + '</span>' + avatarHTML(b.to, 'lg') + '</div>' +
+    '<p class="sh-lede">' + esc(memberName(b.from)) + ' owes ' + esc(memberName(b.to)) + ' <b>' + esc(moneyR(b.amount)) + '</b> for shared costs and things paid for each other, across everything logged. When ' + esc(memberName(b.from)) + ' pays it back, record it here and the balance clears. It isn’t counted as spending.</p>' +
+    '<label class="amt-field"><span class="cur" aria-hidden="true">' + esc(curSymbol()) + '</span><span class="sr">Amount paid back</span><input id="settle-amt" inputmode="decimal" autocomplete="off" value="' + esc(String(Math.round(b.amount))) + '"></label><p class="calc">Pay part of it if you like; the rest stays owed.</p></div>' +
+    '<footer class="sh-foot"><span class="spacer"></span><button type="button" class="btn" data-act="close-sheet">Cancel</button><button type="button" class="btn primary" data-act="settle-save">Record payment</button></footer>', { label: 'Settle up' });
+}
+async function settleSave() {
+  const b = balanceNow();
+  const v = evalAmount($('#settle-amt').value);
+  if (!b || !b.amount || !(v > 0)) { $('#settle-amt').focus(); return; }
+  closeSheet();
+  await recordSettle(Math.min(v, b.amount * 1.5), b.from, b.to);
 }

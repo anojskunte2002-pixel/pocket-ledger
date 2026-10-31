@@ -308,7 +308,7 @@ function categorize(text, typeInfo, ctx) {
 function catFromText(text, type, ctx) { return categorize(text, { type: type || 'expense', strong: !!type }, ctx); }
 
 /* ---------- note + merchant ---------- */
-const FILLER_LEAD = /^(?:on|for|at|to|of|in|the|a|an|my|our|some|from|with|via|using|by|towards|toward|and|&|-|–|:|,|\.)\s+/i;
+const FILLER_LEAD = /^(?:on|for|at|to|of|in|the|a|an|my|our|some|from|with|via|using|by|towards|toward|and|&|-|–|:|,|\.|we|i|(?:we|i)\s+(?:went|had|got|did|paid|spent)(?:\s+(?:for|on|to))?|went\s+(?:for|to|out\s+for))\s+/i;
 const FILLER_TRAIL = /\s+(?:on|for|at|to|of|in|the|a|an|my|from|with|via|using|by|and|&|-|–|:|,)$/i;
 const FILLER_ONLY = /^(?:on|for|at|to|of|in|the|a|an|my|our|from|with|via|by|and|i|it|rs|me|we|us)$/i;
 function cleanNote(s) {
@@ -337,29 +337,38 @@ function removeSpans(s, spans) {
   return arr.join('');
 }
 
-/* ---------- whose money: a household member, or shared ---------- */
-function detectWho(s, ctx) {
+/* ---------- who paid, and who it is for ----------
+   "Meera paid 600 for dessert for both" → paid by Meera, for both of us.
+   "Ravi's cab 300" / "cab 300 for Ravi" → for Ravi (the payer is whoever types it).
+   "Ravi petrol 2000" → a bare name: Ravi paid, for Ravi. */
+const PAY_VERBS = 'paid|pays|spent|bought|gave|ordered|booked|covered|treated|transferred|sent';
+function detectPeople(s, ctx) {
   const members = (ctx && ctx.members) || [];
   const lc = s.toLowerCase();
   const spans = [];
-  let who = '';
-  for (const m of members) {
-    const names = [m.name].concat(m.aliases || []).map(n => String(n || '').trim().toLowerCase()).filter(n => n.length >= 2 && !/^(?:me|you|person \d)$/.test(n));
+  const taken = (a, b) => spans.some(sp => a < sp.end && b > sp.start);
+  const grab = (re, fn) => { re.lastIndex = 0; let m; while ((m = re.exec(lc))) { if (!taken(m.index, m.index + m[0].length)) { spans.push({ start: m.index, end: m.index + m[0].length }); fn(); } if (!re.global) break; } };
+  let paid = '', forWho = '';
+  const forSet = new Set(), bare = [];
+  for (const mb of members) {
+    const names = [mb.name].concat(mb.aliases || []).map(n => String(n || '').trim().toLowerCase()).filter(n => n.length >= 2 && !/^(?:me|you|person \d)$/.test(n));
     for (const n of names) {
-      const re = new RegExp("(?:\\b(?:paid by|spent by|for|by|from)\\s+)?\\b" + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "(?:'s|s')?\\b");
-      const hit = re.exec(lc);
-      if (!hit) continue;
-      who = !who || who === m.id ? m.id : 'joint';
-      spans.push({ start: hit.index, end: hit.index + hit[0].length });
-      break;
+      const N = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      grab(new RegExp('\\b(?:' + PAY_VERBS + ')\\s+by\\s+' + N + '\\b|\\bby\\s+' + N + '\\b|\\b' + N + '\\s+(?:has\\s+|had\\s+|just\\s+)?(?:' + PAY_VERBS + ')\\b', 'g'), () => { if (!paid) paid = mb.id; });
+      grab(new RegExp('\\bfor\\s+' + N + '\\b|\\b' + N + "(?:'s|’s|s')", 'g'), () => forSet.add(mb.id));
+      grab(new RegExp('\\b' + N + '\\b', 'g'), () => bare.push(mb.id));
     }
   }
-  if (!who) {
-    const j = /\b(?:shared|joint|together|both of us|for both|for us|household|split)\b/.exec(lc);
-    if (j) { who = 'joint'; spans.push({ start: j.index, end: j.index + j[0].length }); }
-    else if (/\b(?:our|we|us)\b/.test(lc)) who = 'joint';
-  }
-  return who ? { who, spans } : null;
+  const sharedRe = /\b(?:shared|joint|together|both of us|for both|for us|both|household|split)\b/;
+  const j = sharedRe.exec(lc);
+  if (j && !taken(j.index, j.index + j[0].length)) spans.push({ start: j.index, end: j.index + j[0].length });
+  const people = new Set(Array.from(forSet).concat(bare.filter(id => id !== paid)));
+  if (j || people.size > 1) forWho = 'joint';
+  else if (forSet.size === 1) forWho = Array.from(forSet)[0];
+  else if (people.size === 1) { forWho = Array.from(people)[0]; if (!paid && !forSet.size) paid = forWho; }
+  else if (/\b(?:our|we|us)\b/.test(lc)) forWho = 'joint';
+  if (!paid && !forWho) return null;
+  return { who: forWho, paid, spans };
 }
 
 /* ---------- budget commands ---------- */
@@ -439,7 +448,7 @@ function parseSegment(seg, ctx) {
   if (meth) spans.push(meth);
   const rep = detectRepeat(masked);
   if (rep) spans.push(rep);
-  const wh = detectWho(seg, ctx);
+  const wh = detectPeople(seg, ctx);
   if (wh) for (const sp of wh.spans) spans.push(sp);
   const tags = [];
   seg.replace(/#([A-Za-z0-9_-]+)/g, (m, t) => { if (tags.length < 8 && tags.indexOf(t.toLowerCase()) < 0) tags.push(t.toLowerCase()); return m; });
@@ -463,7 +472,7 @@ function parseSegment(seg, ctx) {
   return {
     type: c.type, amount: best ? best.val : 0, cat: c.cat, catSource: c.source,
     date: d ? d.date : ((ctx && ctx.today) || todayStr()), dateExplicit: !!d,
-    note, merchant, method: meth ? meth.method : '', repeat: rep ? rep.repeat : '', tags, who: wh ? wh.who : '',
+    note, merchant, method: meth ? meth.method : '', repeat: rep ? rep.repeat : '', tags, who: wh ? wh.who : '', paid: wh ? wh.paid : '',
     conf: Math.max(0, conf), raw: seg.trim()
   };
 }
@@ -568,9 +577,10 @@ function parseText(input, ctx) {
   const withDate = entries.find(e => e.dateExplicit);
   const withMethod = entries.find(e => e.method);
   // "shared: dinner 450 and movie 500" makes both shared; a later "shared groceries" never reaches back
-  const jointLead = entries.length > 1 && entries[0].who === 'joint';
+  const jointLead = entries.length > 1 && entries[0].who === 'joint', payLead = entries.length > 1 ? entries[0].paid : '';
   for (const e of entries) {
     if (!e.who && jointLead) e.who = 'joint';
+    if (!e.paid && payLead) e.paid = payLead;
     if (!e.dateExplicit && withDate) e.date = withDate.date;
     if (!e.method && withMethod && entries.length > 1) e.method = withMethod.method;
   }
@@ -602,10 +612,13 @@ function draftsFromAI(obj, ctx) {
     const method = METHODS.find(x => x.toLowerCase() === String(it.method || '').trim().toLowerCase()) || '';
     const rep = String(it.repeat || '').toLowerCase();
     const merchant = String(it.merchant || '').trim().slice(0, 40);
+    const person = n => { const t = String(n || '').trim().toLowerCase(); if (!t) return ''; if (/^(both|shared|joint|us|together)$/.test(t)) return 'joint'; const m = (ctx.members || []).find(x => x.name.toLowerCase() === t); return m ? m.id : ''; };
+    const paid = person(it.paid_by), forWho = person(it.for);
     out.push({
       type, amount, cat, catSource: 'ai', date: isYMD(it.date) ? it.date : ((ctx && ctx.today) || todayStr()), dateExplicit: isYMD(it.date),
       note: cap1(String(it.note || '').trim()).slice(0, 60) || merchant || (co ? co.name : 'Entry'), merchant,
-      method, repeat: ['weekly', 'monthly', 'yearly'].indexOf(rep) >= 0 ? rep : '', tags: [], conf: 0.9, raw: ''
+      method, repeat: ['weekly', 'monthly', 'yearly'].indexOf(rep) >= 0 ? rep : '', tags: [], conf: 0.9, raw: '',
+      paid: paid === 'joint' ? '' : paid, who: forWho
     });
   }
   return out;

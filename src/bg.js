@@ -175,7 +175,7 @@ function refractSupported() {
 }
 function initGlass(fx) {
   const root = document.documentElement;
-  LG.on = refractSupported() && fx === 'full';
+  LG.on = refractSupported() && fx === 'liquid';
   root.classList.toggle('lg-refract', LG.on);
   root.classList.toggle('fx-saver', fx === 'saver');
   root.classList.toggle('fx-frosted', fx === 'frosted');

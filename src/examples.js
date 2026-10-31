@@ -16,7 +16,7 @@ function exampleTry() {
   const h = household(), other = h.solo ? '' : h.members[1].name;
   return [
     'Coffee ' + exAmount(120, 4.5),
-    'Uber ' + exAmount(230, 18) + ' yesterday on card',
+    other ? other + ' paid ' + exAmount(600, 24) + ' for dessert for both' : 'Uber ' + exAmount(230, 18) + ' yesterday on card',
     other ? 'Shared groceries ' + exAmount(1240, 86) : 'Groceries ' + exAmount(1240, 86),
     other ? other + ' salary ' + exAmount(72000, 4600) + ' credited' : 'Salary ' + exAmount(85000, 5200) + ' credited',
     'Lunch ' + exAmount(350, 14) + ' and movie ' + exAmount(500, 16)
@@ -40,10 +40,10 @@ function examplePlan() {
       { id: 'xf5', name: 'Electricity', who: 'joint', cat: 'bills', amount: a(1800, 95), day: 6 },
       { id: 'xf6', name: 'Internet', who: 'joint', cat: 'bills', amount: a(799, 60), day: 9 },
       { id: 'xf7', name: 'Netflix', who: 'joint', cat: 'subs', amount: a(649, 15.49), day: 5 },
-      { id: 'xf8', name: 'SIP', who: 'joint', cat: 'invest', amount: a(10000, 500), day: 10 },
+      { id: 'xf8', name: 'SIP', who: 'p1', cat: 'invest', amount: a(10000, 500), day: 10 },
       { id: 'xf9', name: 'Health insurance', who: 'p2', cat: 'insurance', amount: a(2400, 180), day: 20 }
     ],
-    save: a(25000, 1200),
+    save: { p1: a(15000, 700), p2: a(10000, 500) },
     sample: true
   };
 }
@@ -57,10 +57,11 @@ function buildExamples() {
   const thisMonth = today.slice(0, 7);
   const out = [];
   let n = 0;
-  const add = (date, type, cat, note, merchant, method, amount, who, plan) => {
+  // who it is for, and who paid: shared costs are paid by either of you; now and then one pays for the other
+  const add = (date, type, cat, note, merchant, method, amount, who, plan, payer) => {
     const created = parseYMD(date).getTime() + 9 * 36e5 + (n++ % 50) * 6e4;
-    const by = who === 'joint' ? (rnd() < 0.5 ? 'p1' : 'p2') : who;
-    out.push(normEntry('x' + created.toString(36) + n.toString(36), { type, cat, note, merchant: exName(merchant), method, amount, date, who, by, plan: plan || '', source: 'sample', sample: true, created, updated: created }));
+    const paid = payer || (who === 'joint' ? (rnd() < 0.55 ? 'p1' : 'p2') : (type === 'expense' && rnd() < 0.06 ? (who === 'p1' ? 'p2' : 'p1') : who));
+    out.push(normEntry('x' + created.toString(36) + n.toString(36), { type, cat, note, merchant: exName(merchant), method, amount, date, who, paid, by: paid, plan: plan || '', source: 'sample', sample: true, created, updated: created }));
   };
   // [category, [note, merchant] pairs, methods, rupee range, dollar range, times a week, weekend boost, whose (share for the first person, or a fixed id)]
   const DAILY = [
@@ -92,22 +93,22 @@ function buildExamples() {
   const MONTHLY = [
     [1, 'income', 'salary', 'Salary', 'Acme Corp', 'Bank Transfer', [85000, 85000], [5200, 5200], 'p1', 'xi1'],
     [1, 'income', 'salary', 'Salary', 'Studio Nine', 'Bank Transfer', [72000, 72000], [4600, 4600], 'p2', 'xi2'],
-    [2, 'expense', 'home', 'Rent', '', 'Bank Transfer', [22000, 22000], [1650, 1650], 'joint', 'xf1'],
+    [2, 'expense', 'home', 'Rent', '', 'Bank Transfer', [22000, 22000], [1650, 1650], 'joint', 'xf1', 'p1'],
     [3, 'expense', 'health', 'Gym membership', 'Cult.fit', 'Card', [1500, 1500], [45, 45], 'p1'],
     [5, 'expense', 'emi', 'Car EMI', 'HDFC Bank', 'Bank Transfer', [12500, 12500], [420, 420], 'p1', 'xf2'],
-    [5, 'expense', 'subs', 'Netflix', 'Netflix', 'Credit Card', [649, 649], [15.49, 15.49], 'joint', 'xf7'],
-    [6, 'expense', 'bills', 'Electricity bill', '', 'UPI', [1350, 2200], [70, 125], 'joint', 'xf5'],
+    [5, 'expense', 'subs', 'Netflix', 'Netflix', 'Credit Card', [649, 649], [15.49, 15.49], 'joint', 'xf7', 'p2'],
+    [6, 'expense', 'bills', 'Electricity bill', '', 'UPI', [1350, 2200], [70, 125], 'joint', 'xf5', 'p2'],
     [7, 'expense', 'sendhome', 'Sending home', '', 'UPI', [10000, 10000], [400, 400], 'p1', 'xf3'],
     [8, 'expense', 'sendhome', 'Sending home', '', 'UPI', [8000, 8000], [300, 300], 'p2', 'xf4'],
-    [9, 'expense', 'bills', 'Internet', 'Airtel', 'UPI', [799, 799], [60, 60], 'joint', 'xf6'],
-    [10, 'expense', 'invest', 'SIP', 'Groww', 'Bank Transfer', [10000, 10000], [500, 500], 'joint', 'xf8'],
+    [9, 'expense', 'bills', 'Internet', 'Airtel', 'UPI', [799, 799], [60, 60], 'joint', 'xf6', 'p1'],
+    [10, 'expense', 'invest', 'SIP', 'Groww', 'Bank Transfer', [10000, 10000], [500, 500], 'p1', 'xf8'],
     [12, 'expense', 'subs', 'Spotify', 'Spotify', 'Credit Card', [119, 119], [11.99, 11.99], 'p2'],
     [16, 'income', 'business', 'Freelance design', 'Client', 'Bank Transfer', [12000, 18000], [700, 1100], 'p2', 'xi3'],
     [18, 'expense', 'bills', 'Mobile recharge', 'Jio', 'UPI', [299, 299], [45, 45], 'p1'],
     [18, 'expense', 'bills', 'Mobile recharge', 'Jio', 'UPI', [299, 299], [45, 45], 'p2'],
     [20, 'expense', 'transport', 'Petrol', '', 'Card', [1800, 2600], [42, 60], 'p1'],
     [20, 'expense', 'insurance', 'Health insurance', 'Star Health', 'Card', [2400, 2400], [180, 180], 'p2', 'xf9'],
-    [25, 'expense', 'transfer', 'Credit card bill', '', 'Bank Transfer', [9000, 14000], [600, 900], 'joint']
+    [25, 'expense', 'transfer', 'Credit card bill', '', 'Bank Transfer', [9000, 14000], [600, 900], 'p1']
   ];
   for (let k = -2; k <= 0; k++) {
     const mk = shiftKey(thisMonth, k);
@@ -115,16 +116,26 @@ function buildExamples() {
       const date = mk + '-' + pad2(t[0]);
       if (date > today) continue;
       if (k === 0 && t[9] === 'xf9') continue;
-      add(date, t[1], t[2], t[3], t[4], t[5], exAmount(between(t[6][0], t[6][1]), between(t[7][0], t[7][1])), t[8], t[9]);
+      add(date, t[1], t[2], t[3], t[4], t[5], exAmount(between(t[6][0], t[6][1]), between(t[7][0], t[7][1])), t[8], t[9], t[10]);
     }
   }
   const back = n2 => { const d = addDays(today, -n2); return d < start ? start : d; };
   add(back(5), 'expense', 'shopping', 'Headphones', 'Croma', 'Credit Card', exAmount(5999, 199), 'p1');
   add(back(33), 'expense', 'gifts', 'Birthday gift', '', 'UPI', exAmount(1800, 60), 'p2');
   add(back(30), 'income', 'refund', 'Refund for shoes', 'Myntra', 'UPI', exAmount(1299, 45), 'p2');
-  add(back(58), 'expense', 'travel', 'Weekend trip', 'MakeMyTrip', 'Credit Card', exAmount(7400, 380), 'joint');
+  add(back(58), 'expense', 'travel', 'Weekend trip', 'MakeMyTrip', 'Credit Card', exAmount(7400, 380), 'joint', '', 'p2');
+  add(back(3), 'expense', 'food', 'Dessert', 'Theobroma', 'UPI', exAmount(640, 22), 'joint', '', 'p2');
+  add(back(9), 'expense', 'travel', 'Train tickets home', 'IRCTC', 'UPI', exAmount(2350, 140), 'p2', '', 'p2');
   add(back(52), 'income', 'returns', 'FD interest', '', 'Bank Transfer', exAmount(1250, 38), 'joint');
   add(back(40), 'income', 'bonus', 'Festival bonus', 'Acme Corp', 'Bank Transfer', exAmount(20000, 800), 'p1');
+  for (const k of [-2, -1]) {
+    const mk = shiftKey(thisMonth, k);
+    let net = 0;
+    for (const e of out) if (e.type === 'expense' && e.date.slice(0, 7) === mk) net += (e.paid === 'p1' ? e.amount : 0) - e.amount * (e.who === 'joint' ? 0.5 : e.who === 'p1' ? 1 : 0);
+    net = Math.round(net);
+    const last = mk + '-' + pad2(daysInMonth(+mk.slice(0, 4), +mk.slice(5, 7) - 1));
+    if (Math.abs(net) >= 1 && last <= today) add(last, 'expense', 'settle', 'Settled up', '', 'UPI', Math.abs(net), net > 0 ? 'p1' : 'p2', '', net > 0 ? 'p2' : 'p1');
+  }
   return out;
 }
 function exampleBudgets() {

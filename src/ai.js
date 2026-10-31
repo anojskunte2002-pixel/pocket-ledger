@@ -54,6 +54,7 @@ async function aiParseText(text, signal) {
     'Turn this note about money into entries for a personal finance ledger.',
     'Today is ' + fmtDate(ctx.today, { weekday: 'long' }) + ' ' + ctx.today + '. Ledger currency: ' + FMT.cur + '. Dates written with numbers are ' + (ctx.dateOrder === 'MDY' ? 'month first' : 'day first') + '.',
     catLines(ctx.cats),
+    ctx.members && ctx.members.length > 1 ? 'Two people share this ledger: ' + ctx.members.map(m => m.name).join(' and ') + '. The note was written by ' + memberName(ctx.me) + '. For each entry also give "paid_by": the name of whoever paid (or "" if the note does not say), and "for": the name of the person it was for, "both" if it was for both of them or shared, or "" if the note does not say.' : '',
     '',
     'Note: """' + String(text).slice(0, 4000) + '"""',
     '',

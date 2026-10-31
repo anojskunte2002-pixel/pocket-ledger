@@ -220,13 +220,14 @@ function flowChart(el, A) {
   const P = A.plan;
   const solo = household().solo;
   const pc = w => (solo ? 'var(--series-3)' : 'var(--' + (w === 'p2' ? 'p2' : w === 'joint' ? 'pj' : 'p1') + ')');
-  const left = P && P.incomes.length ? P.incomes.map(r => ({ name: r.name, sub: solo ? '' : memberName(r.who), v: r.amount, color: pc(r.who), tip: [] }))
+  const val = r => (r.mine != null ? r.mine : r.amount);
+  const left = P && P.incomes.length ? P.incomes.map(r => ({ name: r.name, sub: solo ? '' : memberName(r.who), v: val(r), color: pc(r.who), tip: [] }))
     : (P && P.incomeActual > 0 ? [{ name: 'Income so far', sub: '', v: P.incomeActual, color: 'var(--series-3)', tip: [] }] : []);
   if (!P || !left.length) { el.innerHTML = '<p class="muted">Add what comes in each month to see where it goes.</p>'; return; }
   const groups = new Map();
   for (const r of P.fixed) {
     const g = groups.get(r.cat) || { cat: r.cat, v: 0, items: [] };
-    g.v += r.amount; g.items.push(r); groups.set(r.cat, g);
+    g.v += val(r); g.items.push(r); groups.set(r.cat, g);
   }
   let gl = Array.from(groups.values()).sort((a, b) => b.v - a.v);
   const base = Math.max(sum(left, l => l.v), P.fixedTotal + P.save + Math.max(0, P.flexible), 1);
@@ -236,7 +237,7 @@ function flowChart(el, A) {
     name: g.other ? 'Other fixed' : g.items.length === 1 ? g.items[0].name : catById(g.cat).name,
     sub: g.items.length > 1 ? plural(g.items.length, 'item') : '',
     v: g.v, color: !g.other && catById(g.cat).group === 'savings' ? 'var(--ring3)' : 'var(--ring2)',
-    tip: g.items.map(r => ({ label: r.name + (solo ? '' : ' · ' + memberName(r.who)), value: moneyR(r.amount) }))
+    tip: g.items.map(r => ({ label: r.name + (solo ? '' : ' · ' + (r.part != null && r.part < 1 ? pct(r.part) + ' of ' + compact(r.amount) : memberName(r.who))), value: moneyR(val(r)) }))
   }));
   if (P.save > 0) right.push({ name: 'Saving goal', sub: '', v: P.save, color: 'var(--ring3)', tip: [] });
   if (P.flexible > 0) right.push({ name: 'Everyday', sub: 'safe to spend', v: P.flexible, color: 'var(--ring1)', tip: [] });

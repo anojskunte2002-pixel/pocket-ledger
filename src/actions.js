@@ -42,7 +42,7 @@ async function removeRecurring(ids) {
 function makeRule(d) {
   const day = +d.date.slice(8);
   return { id: uid('r'), every: d.repeat, day, start: d.date, next: nextOccurrence(d.date, d.repeat, day), active: true,
-    tpl: { type: d.type, amount: d.amount, cat: d.cat, note: d.note, merchant: d.merchant || '', method: d.method || '', tags: d.tags || [], who: d.who || '' } };
+    tpl: { type: d.type, amount: d.amount, cat: d.cat, note: d.note, merchant: d.merchant || '', method: d.method || '', tags: d.tags || [], who: entryPeople(d).who, paid: entryPeople(d).paid } };
 }
 let materializing = false;
 async function materializeRecurring() {
@@ -94,8 +94,8 @@ async function saveDrafts(drafts, source, quiet) {
   drafts.forEach((d, i) => {
     let rec = '';
     if (d.repeat) { const r = makeRule(d); recs.push(r); rec = r.id; }
-    const who = household().solo ? 'p1' : (d.who === 'p1' || d.who === 'p2' || d.who === 'joint' ? d.who : defaultWhoFor(d.cat));
-    const e = normEntry(uid('t'), Object.assign({}, d, { who, by: d.by || meId(), source: d.source || source || 'text', rec, created: now + i, updated: now + i, sample: false }));
+    const pp = entryPeople(d);
+    const e = normEntry(uid('t'), Object.assign({}, d, { who: pp.who, paid: pp.paid, by: d.by || meId(), source: d.source || source || 'text', rec, created: now + i, updated: now + i, sample: false }));
     entries.push(e);
     if (d.catLocked) { const k = ruleKeyFor(e); if (k) rules.push([k, e.cat]); }
   });
@@ -177,7 +177,7 @@ async function clearExamples() {
   try {
     if (ids.length) await deleteEntries(ids);
     if (budgets().sample) await saveBudgets({ total: 0, cats: {} });
-    if (getPlan().sample) await savePlan({ incomes: [], fixed: [], save: 0, sample: false, skipped: [] });
+    if (getPlan().sample) await savePlan({ incomes: [], fixed: [], save: { p1: 0, p2: 0 }, sample: false, skipped: [] });
     if (Store.meta.household && Store.meta.household.sample) await putMeta('household', { members: [], sharedDefault: true, sample: false });
   } catch (e) { toast(storeErrorText(e)); return; }
   UI.ask = { turns: [], busy: false, ctl: null, live: '', err: '' };
@@ -193,8 +193,8 @@ function csvCell(v) {
 }
 function buildCSV() {
   const two = !household().solo;
-  const rows = [['Date', 'Type', 'Amount', 'Currency', 'Category', 'Note', 'Place or person', 'Paid with', 'Tags'].concat(two ? ['Whose', 'Added by'] : [], ['Source'])];
-  for (const e of sortedEntries().slice().reverse()) rows.push([e.date, e.type, e.amount, FMT.cur, catById(e.cat, e.type).name, e.note, e.merchant, e.method, e.tags.join(' ')].concat(two ? [memberName(whoOf(e)), e.by ? memberName(e.by) : ''] : [], [e.source]));
+  const rows = [['Date', 'Type', 'Amount', 'Currency', 'Category', 'Note', 'Place or person', 'Paid with', 'Tags'].concat(two ? ['Paid by', 'For', 'Added by'] : [], ['Source'])];
+  for (const e of sortedEntries().slice().reverse()) rows.push([e.date, e.type, e.amount, FMT.cur, catById(e.cat, e.type).name, e.note, e.merchant, e.method, e.tags.join(' ')].concat(two ? [e.type === 'income' ? '' : memberName(payerOf(e)), whoOf(e) === 'joint' ? 'Both' : memberName(whoOf(e)), e.by ? memberName(e.by) : ''] : [], [e.source]));
   return '﻿' + rows.map(r => r.map(csvCell).join(',')).join('\r\n');
 }
 function buildBackup() {
@@ -229,15 +229,17 @@ async function offerFile(name, data, mime) {
 
 /* the monthly plan: incomes, fixed costs, saving goal */
 function planRaw() {
-  const p = Store.meta.plan || {};
-  return { incomes: Array.isArray(p.incomes) ? p.incomes.slice() : [], fixed: Array.isArray(p.fixed) ? p.fixed.slice() : [], save: +p.save > 0 ? +p.save : 0, sample: !!p.sample, skipped: Array.isArray(p.skipped) ? p.skipped.slice(-60) : [] };
+  const p = Store.meta.plan || {}, g = getPlan();
+  return { incomes: Array.isArray(p.incomes) ? p.incomes.slice() : [], fixed: Array.isArray(p.fixed) ? p.fixed.slice() : [], save: { p1: g.saveBy.p1, p2: g.saveBy.p2 }, sample: !!p.sample, skipped: Array.isArray(p.skipped) ? p.skipped.slice(-60) : [] };
 }
 function cleanPlanItem(x) {
   return { id: String(x.id).slice(0, 40), name: String(x.name || '').slice(0, 60), who: x.who === 'p1' || x.who === 'p2' || x.who === 'joint' ? x.who : 'joint', cat: String(x.cat || 'other'), amount: round2(+x.amount || 0), day: clamp(parseInt(x.day, 10) || 1, 1, 31), auto: !!x.auto };
 }
 async function savePlan(p) {
   await metaReady();
-  await putMeta('plan', { incomes: (p.incomes || []).map(cleanPlanItem), fixed: (p.fixed || []).map(cleanPlanItem), save: +p.save > 0 ? round2(+p.save) : 0, sample: !!p.sample, skipped: (p.skipped || []).slice(-60) });
+  const sv = p.save && typeof p.save === 'object' ? p.save : { p1: +p.save || 0, p2: 0 };
+  const pos = v => (+v > 0 ? round2(+v) : 0);
+  await putMeta('plan', { incomes: (p.incomes || []).map(cleanPlanItem), fixed: (p.fixed || []).map(cleanPlanItem), save: { p1: pos(sv.p1), p2: pos(sv.p2) }, sample: !!p.sample, skipped: (p.skipped || []).slice(-60) });
 }
 async function upsertPlanItem(d) {
   const p = planRaw(), key = d.kind === 'income' ? 'incomes' : 'fixed', other = key === 'incomes' ? 'fixed' : 'incomes';
@@ -253,15 +255,23 @@ async function removePlanItem(id) {
   p.fixed = p.fixed.filter(x => x.id !== id);
   await savePlan(p);
 }
-async function setPlanSave(v) { const p = planRaw(); p.save = v; p.sample = false; await savePlan(p); }
-/* "Paid" / "Received": logs what is still due as an entry tied to the plan line */
-async function planPay(id) {
+async function setPlanSave(goals) { const p = planRaw(); Object.assign(p.save, goals); p.sample = false; await savePlan(p); }
+/* "Paid" / "Received": logs what is still due as an entry tied to the plan line, paid by whoever taps it unless told */
+async function planPay(arg) {
+  const [id, payer] = String(arg).split('|');
   const A = analyze(UI.period, 'all'), P = A.plan;
   const r = P && P.rows.find(x => x.id === id);
   if (!r || r.state === 'done') return;
   const date = A.isCurrent ? todayStr() : (r.due <= A.p.end ? r.due : A.p.end);
+  const paid = payer === 'p1' || payer === 'p2' ? payer : (r.who === 'p1' || r.who === 'p2' ? r.who : meId());
   closeSheet(true);
-  await saveDrafts([{ type: r.kind === 'income' ? 'income' : 'expense', amount: round2(r.amount - r.paid), cat: r.cat, note: r.name, who: r.who, plan: r.id, date, merchant: '', method: '', tags: [], repeat: '' }], 'plan');
+  await saveDrafts([{ type: r.kind === 'income' ? 'income' : 'expense', amount: round2(r.amount - r.paid), cat: r.cat, note: r.name, who: r.who, paid, plan: r.id, date, merchant: '', method: '', tags: [], repeat: '' }], 'plan');
+}
+/* settling up: the one who owes pays the other back; it moves the balance, never the spending totals */
+async function recordSettle(amount, from, to) {
+  if (!(amount > 0) || from === to) return;
+  const saved = await saveDrafts([{ type: 'expense', amount: round2(amount), cat: 'settle', note: 'Settled up', who: to, paid: from, method: 'UPI', merchant: '', tags: [], repeat: '', date: todayStr() }], 'manual', true);
+  if (saved.length) toast(memberName(from) + ' paid ' + memberName(to) + ' back ' + money(amount), [{ label: 'Undo', run: async () => { try { await deleteEntries(saved.map(e => e.id)); } catch (e) { toast(storeErrorText(e)); } } }], 6500);
 }
 /* plan lines marked "logs itself" are added on their day, once per month */
 let materializingPlan = false;
@@ -277,7 +287,7 @@ async function materializePlan() {
       if (!r.auto || r.state === 'done' || r.state === 'partial' || r.due > today) continue;
       const id = 'p-' + r.id + '-' + key;
       if (Store.entries.has(id) || skipped.indexOf(id) >= 0) continue;
-      out.push(normEntry(id, { type: r.kind === 'income' ? 'income' : 'expense', amount: r.amount, cat: r.cat, note: r.name, who: r.who, plan: r.id, date: r.due, source: 'plan', created: now + out.length, updated: now + out.length }));
+      out.push(normEntry(id, { type: r.kind === 'income' ? 'income' : 'expense', amount: r.amount, cat: r.cat, note: r.name, who: r.who, paid: r.who === 'p2' ? 'p2' : 'p1', plan: r.id, date: r.due, source: 'plan', created: now + out.length, updated: now + out.length }));
     }
     if (out.length) { await putEntries(out); toast('Logged ' + plural(out.length, 'planned item') + ' that came due'); }
   } catch (e) { /* tried again on the next visit */ }

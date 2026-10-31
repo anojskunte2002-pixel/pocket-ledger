@@ -105,33 +105,46 @@ async function closeBar(page) { await page.evaluate(() => { const e = document.g
       // whose money, from plain words
       await typeEntry(page, 'coffee 120');
       let slip = await page.textContent('#slips');
-      ok(/Food & Dining/.test(slip) && /120/.test(slip) && /Ravi/.test(slip), 'preview shows category, amount and whose: ' + slip.replace(/\s+/g, ' ').trim());
+      ok(/Food & Dining/.test(slip) && /120/.test(slip) && /Ravi paid/.test(slip) && /for Ravi/.test(slip), 'preview shows category, amount, who paid and who it is for: ' + slip.replace(/\s+/g, ' ').trim());
       await page.press('#entry', 'Enter');
       await page.waitForSelector('.hero', { timeout: 3000 });
       ok((await page.textContent('#toast-root')).includes('Added'), 'toast confirms the entry');
       ok((await page.inputValue('#entry')) === '', 'input clears after saving');
       await typeEntry(page, 'Meera paid 450 for groceries');
-      ok((await page.textContent('.slip-who')).includes('Meera'), 'a name in the sentence sets whose money it is');
+      let chips = await page.$$eval('.slip-who', b => b.map(x => x.textContent.trim()));
+      ok(/Meera paid$/.test(chips[0]) && chips[1] === 'for both', 'groceries Meera paid for count as shared: ' + chips.join(', '));
       await page.press('#entry', 'Enter');
       await settle(page);
-      await typeEntry(page, 'dinner 600 at Toit and shared groceries 1240');
-      const whos = await page.$$eval('.slip-who', b => b.map(x => x.textContent.trim()));
-      ok(whos.length === 2 && /Ravi$/.test(whos[0]) && whos[1] === 'Shared', '“shared” applies to its own part of the sentence: ' + whos.join(', '));
-      await page.click('.slip-who >> nth=0');
-      ok((await page.textContent('.slip-who >> nth=0')).includes('Meera'), 'tapping the person chip switches whose it is');
+      await typeEntry(page, 'Meera paid 600 for dessert for both and Ravi cab 230');
+      chips = await page.$$eval('.slip-who', b => b.map(x => x.textContent.trim()));
+      ok(chips.length === 4 && /Meera paid$/.test(chips[0]) && chips[1] === 'for both' && /Ravi paid$/.test(chips[2]) && /for Ravi$/.test(chips[3]), 'who paid and who it is for are read per part: ' + chips.join(', '));
+      await page.click('.slip-who >> nth=3');
+      ok((await page.textContent('.slip-who >> nth=3')).trim() === 'for both', 'tapping the “for” chip makes the cab shared');
       await shot(page, '03-capture');
       await page.press('#entry', 'Enter');
       await settle(page);
       const docs = await page.evaluate(() => { const out = []; for (const k of Object.keys(localStorage)) if (/v1:ledger:/.test(k)) out.push(...Object.values(JSON.parse(localStorage[k]).entries)); return out; });
-      const din = docs.find(d => /dinner/i.test(d.note)), shared = docs.find(d => d.amount === 1240), har = docs.find(d => d.amount === 450);
-      ok(din && din.who === 'p2' && din.by === 'p1', 'saved with whose (Meera) and who added it (Ravi)');
-      ok(shared && shared.who === 'joint' && har && har.who === 'p2', 'shared and per-person entries stored');
-      // one person's view
+      const des = docs.find(d => /dessert/i.test(d.note)), cab = docs.find(d => d.amount === 230), gro = docs.find(d => d.amount === 450), cof = docs.find(d => d.amount === 120);
+      ok(des && des.paid === 'p2' && des.who === 'joint' && des.by === 'p1', 'dessert saved as paid by Meera, for both, added by Ravi');
+      ok(cab && cab.paid === 'p1' && cab.who === 'joint' && gro && gro.paid === 'p2' && gro.who === 'joint' && cof && cof.paid === 'p1' && cof.who === 'p1', 'every entry stores who paid and who it is for');
+      // one person's view: her own spending plus her half of shared costs
       await closeBar(page);
       await page.click('#people [data-arg="p2"]');
-      await settle(page);
-      ok((await page.textContent('.hero')).includes('Meera') && (await page.textContent('.hero-num')).includes('1,050'), 'Meera’s view totals her own spending');
+      await page.waitForFunction(() => { const h = document.querySelector('.hero-num'); return h && h.dataset.count === '640'; }, null, { timeout: 4000 }).catch(() => {});
+      const heroTo = () => page.$eval('.hero-num', e => e.dataset.count);
+      ok((await page.textContent('.hero')).includes('Meera') && (await heroTo()) === '640', 'Meera’s spending is her half of the shared costs (₹640): ' + (await heroTo()));
+      ok((await page.textContent('.story')).includes('Share of shared costs'), 'her money story splits own spending from her share');
+      ok((await page.textContent('.settle')).includes('Ravi owes Meera') && (await page.textContent('.settle')).includes('410'), 'balance: Ravi owes Meera ₹410: ' + (await page.textContent('.settle')).trim());
       await shot(page, '04-person');
+      await page.click('.settle [data-act="settle"]');
+      await page.waitForSelector('#settle-amt');
+      ok((await page.inputValue('#settle-amt')) === '410', 'settle up suggests the full ₹410');
+      await page.click('[data-act="settle-save"]');
+      await page.waitForSelector('.settle.ok', { timeout: 4000 }).catch(() => {});
+      ok(!!(await page.$('.settle.ok')), 'after settling up they are all square');
+      const st = await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (/v1:ledger:/.test(k)) for (const e of Object.values(JSON.parse(localStorage[k]).entries)) if (e.cat === 'settle') return e; return null; });
+      ok(st && st.paid === 'p1' && st.who === 'p2' && st.amount === 410, 'the settle-up is stored as Ravi paying Meera back');
+      ok((await heroTo()) === '640', 'settling up is not counted as spending');
       await page.click('#people [data-arg="all"]');
       // plan the month
       await page.click('[data-tab="plan"]');
@@ -163,17 +176,27 @@ async function closeBar(page) { await page.evaluate(() => { const e = document.g
       await settle(page);
       ok((await page.textContent('.eq-item.res b')).includes('1.25L'), 'everyday money = income − fixed costs: ' + (await page.textContent('.eq-item.res b')));
       await page.click('.sec-head [data-act="plan-goal"]');
-      await page.fill('#goal-amt', '25000');
+      await page.fill('#goal-p1', '15000');
+      await page.fill('#goal-p2', '10000');
       await page.click('[data-act="goal-save"]');
       await settle(page);
       ok((await page.textContent('.eq-item.res b')).includes('1L'), 'saving goal comes off the top: ' + (await page.textContent('.eq-item.res b')));
       const links = await page.$$eval('.chart[data-chart="flow"] .fl-link', l => l.length);
       ok(links === 6, 'flow chart joins 2 incomes to 4 uses (' + links + ' ribbons)');
-      await page.click('.pl-row:has-text("Rent") [data-act="plan-pay"]');
+      await page.click('.pl-row:has-text("Rent") .mini-btn');
+      await page.waitForSelector('[data-act="plan-pay"][data-arg$="|p1"]');
+      ok((await page.$$('.sheet [data-act="plan-pay"]')).length === 2, 'a shared bill asks who paid it');
+      await page.click('[data-act="plan-pay"][data-arg$="|p1"]');
       await settle(page);
       ok(!!(await page.$('.pl-row:has-text("Rent") .pl-done')), 'marking rent paid ticks it off');
       const rent = await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (/v1:ledger:/.test(k)) for (const e of Object.values(JSON.parse(localStorage[k]).entries)) if (e.plan && e.amount === 22000) return e; return null; });
-      ok(rent && rent.who === 'joint' && rent.cat === 'home', 'the payment is logged as a shared rent entry');
+      ok(rent && rent.who === 'joint' && rent.paid === 'p1' && rent.cat === 'home', 'the payment is logged as shared rent paid by Ravi');
+      await page.click('#people [data-arg="p2"]');
+      await settle(page);
+      const eq2 = await page.$$eval('.eq-item b', b => b.map(x => x.textContent));
+      ok(eq2[0].includes('72K') && eq2[1].includes('11K') && eq2[2].includes('10K') && eq2[3].includes('51K'), 'Meera’s own plan: her income, half the rent, her goal: ' + eq2.join(' | '));
+      await page.click('#people [data-arg="all"]');
+      await settle(page);
       await page.evaluate(() => window.scrollTo(0, 0));
       await shot(page, '06-plan');
       await page.evaluate(() => window.scrollTo(0, 700));
@@ -189,11 +212,11 @@ async function closeBar(page) { await page.evaluate(() => { const e = document.g
       await page.click('[data-tab="home"]');
       await page.waitForSelector('.hero .rings', { timeout: 3000 });
       ok((await page.textContent('.hero')).includes('Safe to spend'), 'home hero shows what is safe to spend');
-      ok((await page.$$('.split-card')).length === 3, 'split cards for Ravi, Meera and shared');
+      ok((await page.$$('.pcard')).length === 2 && !!(await page.$('.shared-card')), 'side-by-side cards for Ravi and Meera, plus shared money');
       await shot(page, '08-home-plan');
       // edit: whose money, then a learned shortcut
       await page.click('.row >> text=Coffee');
-      await page.waitForSelector('#ed-who');
+      await page.waitForSelector('#ed-people [data-act="ed-paid"]');
       ok((await page.textContent('.sheet')).includes('Added by Ravi'), 'editor shows who added the entry');
       await shot(page, '09-editor');
       await page.click('.cat-opt >> text=Groceries');
@@ -265,7 +288,7 @@ async function closeBar(page) { await page.evaluate(() => { const e = document.g
       await shot(page, '12-settings');
       const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-act="export-csv"]')]);
       const csvOut = fs.readFileSync(await dl.path(), 'utf8');
-      ok(/Date,Type,Amount/.test(csvOut) && /Whose,Added by/.test(csvOut) && csvOut.split('\n').length > 50, 'CSV export includes whose and who added (' + dl.suggestedFilename() + ')');
+      ok(/Date,Type,Amount/.test(csvOut) && /Paid by,For,Added by/.test(csvOut) && csvOut.split('\n').length > 50, 'CSV export includes who paid, who it was for and who added it (' + dl.suggestedFilename() + ')');
       // clear examples keeps own entries and the real plan
       await page.click('.sheet [data-act="clear-examples"]');
       await page.waitForTimeout(400);
@@ -380,7 +403,7 @@ async function closeBar(page) { await page.evaluate(() => { const e = document.g
       await closeBar(page);
       await page.waitForSelector('.hero', { timeout: 3000 });
       const e = await page.evaluate(() => { for (const k of Object.keys(window.__docs)) if (k.indexOf('ledger/') === 0) return Object.values(window.__docs[k].entries)[0]; return null; });
-      ok(e && e.who === 'p2' && e.by === 'p2', 'saved to the shared ledger as hers');
+      ok(e && e.who === 'p2' && e.paid === 'p2' && e.by === 'p2', 'saved to the shared ledger as hers, paid by her');
       ok(!(await page.textContent('#banner')).includes('private'), 'no private-copy banner for a household member');
       await shot(page, '30-partner');
     }
@@ -402,6 +425,17 @@ async function closeBar(page) { await page.evaluate(() => { const e = document.g
     const browser = await chromium.launch();
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'en-IN', timezoneId: 'Asia/Kolkata' });
     await fontRoutes(ctx);
+    await ctx.addInitScript(() => {
+      class FakeRecognition {
+        start() {
+          setTimeout(() => { const r = [{ transcript: 'auto 180 to the station', confidence: 0.9 }]; r.isFinal = true; if (this.onresult) this.onresult({ resultIndex: 0, results: [r] }); }, 120);
+          setTimeout(() => { if (this.onend) this.onend(); }, 260);
+        }
+        stop() { if (this.onend) this.onend(); }
+        abort() {}
+      }
+      window.SpeechRecognition = window.webkitSpeechRecognition = FakeRecognition;
+    });
     const page = await ctx.newPage();
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
@@ -417,6 +451,13 @@ async function closeBar(page) { await page.evaluate(() => { const e = document.g
     await typeEntry(page, 'chai 20');
     await page.press('#entry', 'Enter');
     await page.waitForSelector('.hero');
+    // voice: tap the mic, speak, and the entry is understood and saved (speech engine stubbed)
+    await page.evaluate(() => { const e = document.getElementById('entry'); e.blur(); });
+    await page.waitForTimeout(500);
+    await page.click('#mic-btn');
+    await page.waitForFunction(() => { for (const k of Object.keys(localStorage)) if (/v1:ledger:/.test(k)) for (const e of Object.values(JSON.parse(localStorage[k]).entries)) if (e.source === 'voice') return true; return false; }, null, { timeout: 5000 }).catch(() => {});
+    const spoken = await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (/v1:ledger:/.test(k)) for (const e of Object.values(JSON.parse(localStorage[k]).entries)) if (e.source === 'voice') return e; return null; });
+    ok(spoken && spoken.amount === 180 && spoken.cat === 'transport', 'tapping the mic and speaking saves the entry: ' + JSON.stringify(spoken && { amount: spoken.amount, cat: spoken.cat, note: spoken.note }));
     await ctx.setOffline(true);
     await page.reload();
     await page.waitForSelector('.hero', { timeout: 5000 });
