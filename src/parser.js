@@ -308,9 +308,9 @@ function categorize(text, typeInfo, ctx) {
 function catFromText(text, type, ctx) { return categorize(text, { type: type || 'expense', strong: !!type }, ctx); }
 
 /* ---------- note + merchant ---------- */
-const FILLER_LEAD = /^(?:on|for|at|to|of|in|the|a|an|my|some|from|with|via|using|by|towards|toward|and|&|-|–|:|,|\.)\s+/i;
+const FILLER_LEAD = /^(?:on|for|at|to|of|in|the|a|an|my|our|some|from|with|via|using|by|towards|toward|and|&|-|–|:|,|\.)\s+/i;
 const FILLER_TRAIL = /\s+(?:on|for|at|to|of|in|the|a|an|my|from|with|via|using|by|and|&|-|–|:|,)$/i;
-const FILLER_ONLY = /^(?:on|for|at|to|of|in|the|a|an|my|from|with|via|by|and|i|it|rs|me)$/i;
+const FILLER_ONLY = /^(?:on|for|at|to|of|in|the|a|an|my|our|from|with|via|by|and|i|it|rs|me|we|us)$/i;
 function cleanNote(s) {
   let t = ' ' + s + ' ';
   t = t.replace(/#[A-Za-z0-9_-]+/g, ' ');
@@ -335,6 +335,31 @@ function removeSpans(s, spans) {
   const arr = s.split('');
   for (const sp of spans) for (let i = sp.start; i < sp.end && i < arr.length; i++) arr[i] = ' ';
   return arr.join('');
+}
+
+/* ---------- whose money: a household member, or shared ---------- */
+function detectWho(s, ctx) {
+  const members = (ctx && ctx.members) || [];
+  const lc = s.toLowerCase();
+  const spans = [];
+  let who = '';
+  for (const m of members) {
+    const names = [m.name].concat(m.aliases || []).map(n => String(n || '').trim().toLowerCase()).filter(n => n.length >= 2 && !/^(?:me|you|person \d)$/.test(n));
+    for (const n of names) {
+      const re = new RegExp("(?:\\b(?:paid by|spent by|for|by|from)\\s+)?\\b" + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "(?:'s|s')?\\b");
+      const hit = re.exec(lc);
+      if (!hit) continue;
+      who = !who || who === m.id ? m.id : 'joint';
+      spans.push({ start: hit.index, end: hit.index + hit[0].length });
+      break;
+    }
+  }
+  if (!who) {
+    const j = /\b(?:shared|joint|together|both of us|for both|for us|household|split)\b/.exec(lc);
+    if (j) { who = 'joint'; spans.push({ start: j.index, end: j.index + j[0].length }); }
+    else if (/\b(?:our|we|us)\b/.test(lc)) who = 'joint';
+  }
+  return who ? { who, spans } : null;
 }
 
 /* ---------- budget commands ---------- */
@@ -414,11 +439,13 @@ function parseSegment(seg, ctx) {
   if (meth) spans.push(meth);
   const rep = detectRepeat(masked);
   if (rep) spans.push(rep);
+  const wh = detectWho(seg, ctx);
+  if (wh) for (const sp of wh.spans) spans.push(sp);
   const tags = [];
   seg.replace(/#([A-Za-z0-9_-]+)/g, (m, t) => { if (tags.length < 8 && tags.indexOf(t.toLowerCase()) < 0) tags.push(t.toLowerCase()); return m; });
   const lc = masked.toLowerCase();
   const typeInfo = detectType(lc, best ? best.sign : '');
-  const textForCat = removeSpans(seg, best ? [best] : []);
+  const textForCat = removeSpans(seg, (best ? [best] : []).concat(wh ? wh.spans : []));
   const c = categorize(textForCat, typeInfo, ctx);
   const rest = removeSpans(seg, spans);
   let note = cleanNote(rest);
@@ -436,7 +463,7 @@ function parseSegment(seg, ctx) {
   return {
     type: c.type, amount: best ? best.val : 0, cat: c.cat, catSource: c.source,
     date: d ? d.date : ((ctx && ctx.today) || todayStr()), dateExplicit: !!d,
-    note, merchant, method: meth ? meth.method : '', repeat: rep ? rep.repeat : '', tags,
+    note, merchant, method: meth ? meth.method : '', repeat: rep ? rep.repeat : '', tags, who: wh ? wh.who : '',
     conf: Math.max(0, conf), raw: seg.trim()
   };
 }
@@ -540,7 +567,10 @@ function parseText(input, ctx) {
   const entries = segmentText(text).map(s => parseSegment(s, ctx));
   const withDate = entries.find(e => e.dateExplicit);
   const withMethod = entries.find(e => e.method);
+  // "shared: dinner 450 and movie 500" makes both shared; a later "shared groceries" never reaches back
+  const jointLead = entries.length > 1 && entries[0].who === 'joint';
   for (const e of entries) {
+    if (!e.who && jointLead) e.who = 'joint';
     if (!e.dateExplicit && withDate) e.date = withDate.date;
     if (!e.method && withMethod && entries.length > 1) e.method = withMethod.method;
   }

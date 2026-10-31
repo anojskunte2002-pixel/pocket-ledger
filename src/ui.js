@@ -1,4 +1,4 @@
-/* ===================== interface: chrome, views, dock ===================== */
+/* ===================== interface: chrome, views, capture ===================== */
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 const SVG = p => '<svg viewBox="0 0 24 24" aria-hidden="true">' + p + '</svg>';
@@ -6,6 +6,7 @@ const ICON = {
   mic: SVG('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>'),
   stop: SVG('<rect x="7" y="7" width="10" height="10" rx="2"/>'),
   plus: SVG('<path d="M12 5v14M5 12h14"/>'),
+  send: SVG('<path d="M12 19V5M5 12l7-7 7 7"/>'),
   camera: SVG('<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>'),
   x: SVG('<path d="M18 6L6 18M6 6l12 12"/>'),
   search: SVG('<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>'),
@@ -21,7 +22,7 @@ const ICON = {
   sparkle: SVG('<path d="M12 3l1.8 4.6 4.7 1.9-4.7 1.9L12 16l-1.8-4.6-4.7-1.9 4.7-1.9z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/>'),
   repeat: SVG('<path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/>'),
   receipt: SVG('<path d="M5 3v18l2-1.5L9 21l2-1.5 2 1.5 2-1.5 2 1.5 2-1.5V3l-2 1.5L15 3l-2 1.5L11 3 9 4.5 7 3z"/><path d="M9 8h6M9 12h6M9 16h4"/>'),
-  calendar: SVG('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>'),
+  calendar: SVG('<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M16 3v4M8 3v4M3 10h18"/>'),
   leaf: SVG('<path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.5 19 2c1 2 2 4.2 2 8 0 5.5-4.8 10-10 10z"/><path d="M2 21c0-3 1.9-5.4 5.1-6"/>'),
   pin: SVG('<path d="M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>'),
   tag: SVG('<path d="M3 12V4h8l9 9-8 8z"/><circle cx="7.5" cy="7.5" r="1.5"/>'),
@@ -34,22 +35,33 @@ const ICON = {
   device: SVG('<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>'),
   info: SVG('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'),
   copy: SVG('<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>'),
-  upload: SVG('<path d="M12 15V3M7 8l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>')
+  upload: SVG('<path d="M12 15V3M7 8l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>'),
+  home: SVG('<path d="M4 10.5L12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/>'),
+  list: SVG('<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>'),
+  plan: SVG('<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18M9 15.5l2 2 4-4"/>'),
+  chart: SVG('<path d="M4 20V11M10 20V5M16 20v-6M21 20H3"/>'),
+  people: SVG('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14.6a5 5 0 0 1 6 4.4"/>'),
+  palette: SVG('<path d="M12 3a9 9 0 1 0 0 18c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.4A4.6 4.6 0 0 0 22 9.8C22 6 17.5 3 12 3z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7" r="1"/>'),
+  clock: SVG('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+  bell: SVG('<path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4z"/><path d="M10 21h4"/>'),
+  sliders: SVG('<path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17" r="2"/>')
 };
 const ic = name => '<span class="ic" aria-hidden="true">' + (ICON[name] || ICON.info) + '</span>';
-/* Inside Claude the page gets cloud storage and Claude; as a plain website it keeps data in this browser. */
+/* Inside Claude the page gets shared cloud storage and Claude; as a plain website it keeps data in this browser. */
 const IN_CLAUDE = typeof window !== 'undefined' && !!(window.claude && typeof window.claude.use === 'function');
 function uiFlag(k, v) { try { if (v === undefined) return localStorage.getItem(LS_PREFIX + 'ui:' + k) === '1'; localStorage.setItem(LS_PREFIX + 'ui:' + k, v ? '1' : '0'); } catch (e) { /* optional */ } return false; }
 function plural(n, one, many) { return n + ' ' + (n === 1 ? one : (many || one + 's')); }
+function ordinal(n) { const s = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th'); return n + s; }
 
 const UI = {
-  tab: 'home', period: '', periodTouched: false,
+  tab: 'home', person: 'all', period: '', periodTouched: false,
   act: { q: '', type: 'all', cat: '' }, actLimit: 300,
-  draft: null, slipOver: {}, busy: false, aiCtl: null,
+  draft: null, slipOver: {}, busy: false, aiCtl: null, capOpen: false,
   undo: null, flash: new Set(), flashTimer: 0,
   ask: { turns: [], busy: false, ctl: null, live: '', err: '' },
   review: { busy: false, text: '', err: '', ctl: null, key: '' },
-  tables: {}, mounted: '', insSig: '', downloads: null, permissions: null
+  tables: {}, mounted: '', insSig: '', downloads: null, permissions: null,
+  counted: new Map(), ringsDone: false
 };
 
 /* ---------- render loop ---------- */
@@ -60,6 +72,7 @@ function renderNow() {
   const st = settings();
   if (FMT.cur !== st.currency) setCurrency(st.currency);
   if (!UI.period || (!UI.periodTouched && UI.period !== currentKey())) UI.period = currentKey();
+  if (household().solo && UI.person !== 'all') UI.person = 'all';
   renderHeader();
   renderBanner();
   renderView();
@@ -69,27 +82,52 @@ function renderNow() {
 function periodShortLabel(p) {
   return settings().startDay === 1 ? fmtDate(p.start, { month: 'short', year: 'numeric' }) : shortDate(p.start) + '–' + shortDate(p.end);
 }
+function avatarHTML(id, size) {
+  const cls = 'av ' + (id === 'p2' ? 'p2' : id === 'joint' ? 'joint' : 'p1') + (size ? ' ' + size : '');
+  return '<span class="' + cls + '" aria-hidden="true">' + (id === 'joint' ? '<i></i><i></i>' : esc(initials(memberName(id)))) + '</span>';
+}
 function renderHeader() {
-  const sd = settings().startDay, p = periodFromKey(UI.period, sd), cur = currentKey();
+  const h = household(), sd = settings().startDay, p = periodFromKey(UI.period, sd), cur = currentKey();
+  const av = $('#avatars');
+  const avH = h.solo ? avatarHTML('p1') : avatarHTML('p1') + avatarHTML('p2');
+  if (av.innerHTML !== avH) av.innerHTML = avH;
+  $('#hh-title').textContent = h.setup ? h.members.map(m => m.name).join(' & ') : 'Pocket Ledger';
+  $('#hh-sub').textContent = h.setup ? (h.solo ? 'Pocket Ledger' : 'Household') : 'Your money, one line at a time';
   const lab = $('#period-label');
-  lab.innerHTML = '<span class="pl-long">' + esc(periodLabel(p)) + '</span><span class="pl-short">' + esc(periodShortLabel(p)) + '</span>';
+  const labH = '<span class="pl-long">' + esc(periodLabel(p)) + '</span><span class="pl-short">' + esc(periodShortLabel(p)) + '</span>';
+  if (lab.innerHTML !== labH) lab.innerHTML = labH;
   lab.setAttribute('aria-label', UI.period === cur ? 'Showing ' + periodLabel(p) : 'Showing ' + periodLabel(p) + '. Go back to this month');
   $('#next-period').disabled = UI.period >= cur;
-  for (const b of $$('.tabs [data-tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === UI.tab));
+  const ppl = $('#people');
+  ppl.hidden = h.solo;
+  if (!h.solo) {
+    const opts = [['all', 'Everyone'], ['p1', h.members[0].name], ['p2', h.members[1].name], ['joint', 'Shared']];
+    const sig = opts.map(o => o[1]).join('|');
+    if (ppl.dataset.sig !== sig) {
+      ppl.innerHTML = '<span class="seg-thumb" aria-hidden="true"></span>' + opts.map(o => '<button type="button" role="radio" data-act="person" data-arg="' + o[0] + '">' + (o[0] === 'all' ? '' : avatarHTML(o[0], 'xs')) + '<span>' + esc(o[1]) + '</span></button>').join('');
+      ppl.dataset.sig = sig;
+    }
+    const idx = Math.max(0, opts.findIndex(o => o[0] === UI.person));
+    ppl.style.setProperty('--i', idx);
+    for (const b of $$('button', ppl)) b.setAttribute('aria-checked', String(b.dataset.arg === UI.person));
+  }
+  for (const b of $$('.lbar [data-tab]')) { const on = b.dataset.tab === UI.tab; b.classList.toggle('on', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
+  const tabs = $('#lbar .tabs');
+  if (tabs) tabs.style.setProperty('--ti', Math.max(0, ['home', 'activity', 'plan', 'insights'].indexOf(UI.tab)));
 }
 function bannerHTML(icon, text, tone, extra) {
-  return '<div class="banner' + (tone ? ' tone-' + tone : '') + '">' + ic(icon) + '<span>' + text + '</span>' + (extra || '') + '</div>';
+  return '<div class="banner glass' + (tone ? ' tone-' + tone : '') + '">' + ic(icon) + '<span>' + text + '</span>' + (extra || '') + '</div>';
 }
 let SAMPLE_CACHE = { v: -1, has: false };
 function hasSamples() {
   if (SAMPLE_CACHE.v !== Store.version) { let h = false; for (const e of Store.entries.values()) if (e.sample) { h = true; break; } SAMPLE_CACHE = { v: Store.version, has: h }; }
-  return SAMPLE_CACHE.has;
+  return SAMPLE_CACHE.has || getPlan().sample;
 }
 function renderBanner() {
   let h = '';
   if (Store.ready) {
-    if (Store.mode === 'device' && !IN_CLAUDE) { if (!uiFlag('device-note')) h += bannerHTML('device', 'Your entries stay private in this browser, on this device. Nothing is sent to a server. Download a backup from Settings now and then.', '', '<button class="link" type="button" data-act="hide-device-note">Got it</button>'); }
-    else if (Store.mode === 'device') h += bannerHTML('device', Store.reason === 'not-owner' ? 'This ledger belongs to someone else, so you have your own copy here. It is saved on this device only.' : 'Entries are saved on this device only. Open this page in Claude while signed in to keep them in your account.');
+    if (Store.mode === 'device' && !IN_CLAUDE) { if (!uiFlag('device-note')) h += bannerHTML('device', 'Your entries stay private in this browser, on this device. Download a backup from Settings now and then.', '', '<button class="link" type="button" data-act="hide-device-note">Got it</button>'); }
+    else if (Store.mode === 'device') h += bannerHTML('device', Store.reason === 'no-access' ? 'This ledger is private to its household. You have your own copy here, saved on this device only.' : 'Entries are saved on this device only. Open this page in Claude while signed in to keep them in your account.');
     else if (Store.mode === 'memory') h += bannerHTML('alert', 'This browser is blocking storage, so entries disappear when you close the page. Export a backup before you leave.', 'warn');
     if (Store.error) h += bannerHTML('alert', esc(Store.error), 'warn');
     if (hasSamples()) h += bannerHTML('sparkle', 'You are looking at example data. Your own entries stay when you clear it.', 'info', '<button class="link" type="button" data-act="clear-examples">Clear examples</button>');
@@ -97,10 +135,18 @@ function renderBanner() {
   const el = $('#banner');
   if (el.innerHTML !== h) el.innerHTML = h;
 }
+function enterMotion(v) {
+  if (reducedMotion()) return;
+  v.classList.remove('enter');
+  void v.offsetWidth;
+  v.classList.add('enter');
+  clearTimeout(enterMotion.t);
+  enterMotion.t = setTimeout(() => v.classList.remove('enter'), 900);
+}
 function renderView() {
   const v = $('#view');
   if (!Store.ready) return;
-  const tab = UI.tab;
+  const tab = UI.tab, fresh = UI.mounted !== tab;
   if (tab === 'activity') {
     if (UI.mounted !== 'activity') { v.innerHTML = activityShell(); UI.mounted = 'activity'; bindActivity(); }
     updateActivity();
@@ -109,17 +155,35 @@ function renderView() {
     if (UI.mounted !== 'insights' || UI.insSig !== sig) { v.innerHTML = insightsShell(); UI.mounted = 'insights'; UI.insSig = sig; bindInsights(); }
     updateInsights();
   } else {
-    const keepScroll = UI.mounted === tab;
-    v.innerHTML = tab === 'budgets' ? budgetsHTML() : homeHTML();
+    v.innerHTML = tab === 'plan' ? planHTML() : homeHTML();
     UI.mounted = tab;
-    if (!keepScroll) window.scrollTo(0, 0);
+    if (fresh) window.scrollTo(0, 0);
+    afterRender();
   }
+  if (fresh) enterMotion(v);
+  refractNow();
+}
+function afterRender() {
+  for (const el of $$('#view .chart[data-chart="flow"]')) flowChart(el, analyze(UI.period, 'all'));
+  animateRings();
+  runCountUps();
 }
 function setTab(t) {
-  if (['home', 'activity', 'insights', 'budgets'].indexOf(t) < 0) t = 'home';
-  if (UI.tab !== t) { UI.tab = t; window.scrollTo(0, 0); }
-  if (location.hash !== '#' + t) { try { history.replaceState(null, '', '#' + t); } catch (e) { location.hash = t; } }
-  hideTip();
+  if (['home', 'activity', 'plan', 'insights'].indexOf(t) < 0) t = 'home';
+  const change = UI.tab !== t;
+  const go = () => {
+    UI.tab = t;
+    if (location.hash !== '#' + t) { try { history.replaceState(null, '', '#' + t); } catch (e) { location.hash = t; } }
+    hideTip();
+    if (change) window.scrollTo(0, 0);
+    renderNow();
+  };
+  go();
+}
+function setPerson(p) {
+  if (['all', 'p1', 'p2', 'joint'].indexOf(p) < 0 || household().solo) p = 'all';
+  if (UI.person === p) return;
+  UI.person = p;
   render();
 }
 function shiftPeriod(n) {
@@ -129,19 +193,46 @@ function shiftPeriod(n) {
   render();
 }
 
+/* ---------- motion: numbers that count, rings that fill ---------- */
+function runCountUps() {
+  for (const el of $$('[data-count]')) {
+    const to = +el.dataset.count, key = el.dataset.key || 'n';
+    const had = UI.counted.has(key), from = had ? UI.counted.get(key) : to;
+    UI.counted.set(key, to);
+    if (!had || from === to || reducedMotion()) continue;
+    const sign = el.dataset.sign || '';
+    const t0 = performance.now(), D = 700;
+    const step = now => {
+      const k = Math.min(1, (now - t0) / D), e = 1 - Math.pow(1 - k, 3);
+      el.textContent = sign + moneyR(from + (to - from) * e);
+      if (k < 1 && el.isConnected) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+}
+function animateRings() {
+  const rings = $$('#view .ring-val');
+  if (!rings.length || UI.ringsDone || reducedMotion()) { UI.ringsDone = UI.ringsDone || rings.length > 0; return; }
+  UI.ringsDone = true;
+  for (const r of rings) { r.style.transition = 'none'; r.setAttribute('stroke-dashoffset', r.dataset.c); }
+  requestAnimationFrame(() => requestAnimationFrame(() => { for (const r of rings) { r.style.transition = ''; r.setAttribute('stroke-dashoffset', r.dataset.off); } }));
+}
+
 /* ---------- rows ---------- */
 function rowHTML(e) {
-  const c = catById(e.cat, e.type), k = kindOf(e);
+  const c = catById(e.cat, e.type), k = kindOf(e), solo = household().solo, w = whoOf(e);
   const metaBits = [c.name];
+  if (!solo) metaBits.push(memberName(w));
   if (e.merchant && e.note.toLowerCase().indexOf(e.merchant.toLowerCase()) < 0) metaBits.push(e.merchant);
   if (e.method) metaBits.push(e.method);
-  if (e.rec) metaBits.push('repeats');
+  if (e.rec || e.plan) metaBits.push('planned');
   if (e.tags.length) metaBits.push('#' + e.tags.join(' #'));
+  const by = !solo && e.by && e.by !== w ? '<span class="by">added by ' + esc(memberName(e.by)) + '</span>' : '';
   const amt = e.type === 'income' ? money(e.amount, { sign: true }) : money(e.amount);
   const sub = k === 'transfer' ? '<small>not spending</small>' : k === 'invest' ? '<small>saved</small>' : '';
   return '<button type="button" class="row ' + e.type + ' k-' + k + (UI.flash.has(e.id) ? ' flash' : '') + '" data-act="edit" data-arg="' + esc(e.id) + '">' +
-    '<span class="badge" aria-hidden="true">' + esc(c.emoji) + '</span>' +
-    '<span class="row-main"><span class="row-title">' + esc(e.note) + '</span><span class="row-meta">' + esc(metaBits.join(' · ')) + '</span></span>' +
+    '<span class="badge" aria-hidden="true">' + esc(c.emoji) + (solo ? '' : '<span class="who-dot ' + w + '"></span>') + '</span>' +
+    '<span class="row-main"><span class="row-title">' + esc(e.note) + '</span><span class="row-meta">' + esc(metaBits.join(' · ')) + by + '</span></span>' +
     '<span class="row-amt">' + amt + sub + '</span></button>';
 }
 function dayGroupsHTML(list, totals) {
@@ -150,15 +241,15 @@ function dayGroupsHTML(list, totals) {
   if (totals) for (const e of list) { const t = tot[e.date] || (tot[e.date] = { s: 0, i: 0 }); if (kindOf(e) === 'spend') t.s += e.amount; else if (e.type === 'income') t.i += e.amount; }
   for (const e of list) {
     if (e.date !== day) {
-      if (day) h += '</div>';
+      if (day) h += '</div></div>';
       day = e.date;
       let t = '';
       if (totals) { const x = tot[day], bits = []; if (x.s) bits.push(money(x.s) + ' spent'); if (x.i) bits.push(money(x.i, { sign: true })); t = '<span class="tot">' + esc(bits.join(' · ')) + '</span>'; }
-      h += '<div class="day"><div class="day-h"><span>' + esc(dayLabel(day)) + '</span>' + t + '</div>';
+      h += '<div class="day"><div class="day-h"><span>' + esc(dayLabel(day)) + '</span>' + t + '</div><div class="glass list">';
     }
     h += rowHTML(e);
   }
-  if (day) h += '</div>';
+  if (day) h += '</div></div>';
   return h;
 }
 function flashIds(ids) {
@@ -168,87 +259,220 @@ function flashIds(ids) {
 }
 
 /* ---------- home ---------- */
+function greetHTML(A) {
+  const hr = new Date().getHours();
+  const part = hr < 5 ? 'Good night' : hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : hr < 22 ? 'Good evening' : 'Good night';
+  const h = household();
+  const name = h.setup ? memberName(meId()) : '';
+  let sub;
+  if (A.isCurrent) sub = fmtDate(todayStr(), { weekday: 'long', day: 'numeric', month: 'long' }) + ' · ' + (A.daysLeft === 0 ? 'last day of the month' : plural(A.daysLeft, 'day') + ' left this month');
+  else sub = 'Looking back at ' + periodLabel(A.p);
+  if (UI.person !== 'all') sub = 'Showing ' + (UI.person === 'joint' ? 'shared money' : memberName(UI.person) + '’s own money') + ' · ' + sub;
+  return '<section class="greet"><h1>' + part + (name ? ', <em>' + esc(name) + '</em>' : '') + '</h1><p>' + esc(sub) + '</p></section>';
+}
 function welcomeHTML() {
   const tries = exampleTry();
   const ways = [
     ['keyboard', 'Type it', 'Like a text: “uber 230 yesterday on card”', 'focus-entry'],
-    ['mic', 'Say it', 'Tap the mic, or your keyboard’s mic, and talk', 'voice'],
+    ['mic', 'Say it', 'Tap the mic and talk', 'voice'],
     ['camera', 'Snap a receipt', 'Photos and payment screenshots', 'scan'],
     ['message', 'Paste bank messages', 'SMS or e-mail alerts, many at once', 'import-sms'],
     ['file', 'Import a statement', 'CSV from your bank or card', 'import-csv'],
-    ['pencil', 'Fill in a form', 'Pick the category yourself', 'new-entry']
+    ['plan', 'Plan the month', 'Income, fixed costs and a saving goal', 'tab-plan']
   ].filter(w => w[3] !== 'scan' || (aiReady() && AI.images));
+  const h = household();
   return '<section class="welcome">' +
     '<p class="eyebrow">Your money, one line at a time</p>' +
-    '<h1>Track money by just saying it.</h1>' +
-    '<p class="lede">Type or speak the way you would text a friend. Pocket Ledger finds the amount, the date, how you paid and the right category, then turns it all into budgets and insights.</p>' +
-    '<div class="try"><span class="lbl-s">Tap one to try it</span><div class="try-row">' + tries.map(t => '<button type="button" class="try-chip" data-act="try" data-arg="' + esc(t) + '">' + esc(t) + '</button>').join('') + '</div></div>' +
-    '<ul class="ways">' + ways.map(w => '<li><button type="button" class="way" data-act="' + w[3] + '">' + ic(w[0]) + '<b>' + w[1] + '</b><span>' + w[2] + '</span></button></li>').join('') + '</ul>' +
+    '<h1>Track money by <em>just saying it.</em></h1>' +
+    '<p class="lede">Type or speak the way you would text someone. Pocket Ledger finds the amount, the date, how you paid' + (h.solo ? '' : ', whose it was') + ' and the right category, then turns it all into a plan you can trust.</p>' +
+    (h.setup ? '' : '<div class="welcome-cta"><button type="button" class="btn primary" data-act="household">' + ic('people') + 'Set up your household</button><span class="muted">One person or two. Takes ten seconds.</span></div>') +
+    '<div class="try"><span class="lbl-s">Tap one to try it</span><div class="try-row">' + tries.map(t => '<button type="button" class="try-chip glass" data-act="try" data-arg="' + esc(t) + '">' + esc(t) + '</button>').join('') + '</div></div>' +
+    '<ul class="ways">' + ways.map(w => '<li><button type="button" class="way glass" data-act="' + w[3] + '">' + ic(w[0]) + '<b>' + w[1] + '</b><span>' + w[2] + '</span></button></li>').join('') + '</ul>' +
     '<div class="welcome-cta"><button type="button" class="btn" data-act="examples">' + ic('sparkle') + 'Explore with example data</button><span class="muted">Clearly marked, and gone with one tap.</span></div>' +
     '</section>';
 }
 function homeHTML() {
-  if (!Store.entries.size) return welcomeHTML();
-  const A = analyze(UI.period);
-  return heroHTML(A) + topInsightsHTML(A) + recentHTML(A);
+  if (!Store.entries.size && !getPlan().exists) return welcomeHTML();
+  const A = analyze(UI.period, UI.person);
+  let h = greetHTML(A);
+  if (UI.person !== 'all') h += personHeroHTML(A);
+  else h += A.plan ? planHeroHTML(A) : spendHeroHTML(A);
+  if (UI.person === 'all' && !household().solo) h += splitHTML(A);
+  if (UI.person === 'all' && A.plan && A.plan.fixed.length) h += billsStripHTML(A);
+  h += topInsightsHTML(A) + recentHTML(A);
+  return h;
 }
-function heroHTML(A) {
+function ringsSVG(rings, label) {
+  let s = '<svg class="rings" viewBox="0 0 140 140" role="img" aria-label="' + esc(label) + '">';
+  rings.forEach((r, i) => {
+    const rad = 70 - 7 - i * 17, c = 2 * Math.PI * rad, v = clamp(r.v || 0, 0, 1), off = c * (1 - v);
+    s += '<circle class="ring-track" cx="70" cy="70" r="' + rad + '" style="stroke:' + r.color + '"/>';
+    s += '<circle class="ring-val" cx="70" cy="70" r="' + rad + '" stroke-dasharray="' + f1(c) + '" stroke-dashoffset="' + f1(off) + '" data-c="' + f1(c) + '" data-off="' + f1(off) + '" transform="rotate(-90 70 70)" style="stroke:' + (r.over ? 'var(--bad)' : r.color) + '"/>';
+  });
+  return s + '</svg>';
+}
+function planHeroHTML(A) {
+  const P = A.plan, left = P.flexLeft, daysIncl = A.isCurrent ? A.daysLeft + 1 : 0;
+  let tone = 'good', chip = 'On plan';
+  if (left < 0) { tone = 'bad'; chip = 'Over plan'; }
+  else if (A.isCurrent && A.dayIndex >= 3 && A.everydayProjected > P.flexible * 1.02) { tone = 'warn'; chip = 'Spending fast'; }
+  if (!A.isCurrent) chip = left >= 0 ? 'Closed under plan' : 'Closed over plan';
+  const label = A.isCurrent ? (left >= 0 ? 'Safe to spend' : 'Over your everyday plan') : (left >= 0 ? 'Left unspent' : 'Over plan');
+  const sub = A.isCurrent
+    ? (left >= 0 ? (daysIncl > 1 ? 'About ' + moneyR(left / daysIncl) + ' a day · ' + plural(daysIncl, 'day') + ' to go' : 'Last day of the month, and all of it is still yours') : 'Everyday spending is ' + moneyR(-left) + ' past plan')
+    : 'Everyday plan ' + money(P.flexible) + ', spent ' + moneyR(P.everydaySpent);
+  const rings = [
+    { v: P.flexible > 0 ? P.everydaySpent / P.flexible : (P.everydaySpent > 0 ? 1 : 0), color: 'var(--ring1)', over: P.everydaySpent > P.flexible },
+    { v: P.fixedTotal > 0 ? P.fixedPaid / P.fixedTotal : 0, color: 'var(--ring2)' },
+    { v: P.expectedIncome > 0 ? P.incomeActual / P.expectedIncome : (P.incomeActual > 0 ? 1 : 0), color: 'var(--ring3)' }
+  ];
+  const legend = [
+    ['ring1', 'Everyday', compact(P.everydaySpent) + ' of ' + compact(Math.max(0, P.flexible))],
+    ['ring2', 'Bills paid', P.doneCount + ' of ' + P.fixed.length + (P.fixedLeft > 0 ? ' · ' + compact(P.fixedLeft) + ' due' : '')],
+    ['ring3', 'Income in', compact(P.incomeActual) + ' of ' + compact(P.expectedIncome)]
+  ];
+  return '<section class="glass hero refract">' +
+    '<div class="hero-top"><span class="eyebrow">' + esc(label) + '</span><span class="chip tone-' + tone + '">' + ic(tone === 'good' ? 'check' : 'alert') + chip + '</span></div>' +
+    '<div class="hero-main"><div class="hero-figure"><div class="hero-num" data-count="' + Math.round(Math.abs(left)) + '" data-key="hero">' + esc(moneyR(Math.abs(left))) + '</div><p class="hero-sub">' + esc(sub) + '</p></div>' +
+    ringsSVG(rings, 'Everyday ' + pct(rings[0].v) + ' used, bills ' + pct(rings[1].v) + ' paid, income ' + pct(rings[2].v) + ' received') + '</div>' +
+    '<ul class="legend-rows">' + legend.map(l => '<li><i style="--k:var(--' + l[0] + ')"></i><span>' + l[1] + '</span><b>' + esc(l[2]) + '</b></li>').join('') + '</ul>' +
+    '</section>';
+}
+function spendHeroHTML(A) {
   const b = A.budgetTotal;
   let chip = '', meter = '', sub = '';
-  const daysIncl = A.daysLeft + 1;
   if (b) {
     const left = b - A.spend;
     let tone = 'good', label = A.isCurrent ? 'On track' : 'Under budget';
     if (left < 0) { tone = 'bad'; label = 'Over budget'; }
     else if (A.isCurrent && A.dayIndex >= 3 && A.projection > b * 1.02) { tone = 'warn'; label = 'Spending fast'; }
     chip = '<span class="chip tone-' + tone + '">' + ic(tone === 'good' ? 'check' : 'alert') + label + '</span>';
-    const pace = A.isCurrent ? A.dayIndex / A.p.days : 0;
-    meter = '<div class="meter tone-' + tone + '" role="meter" aria-label="Budget used" aria-valuemin="0" aria-valuemax="' + Math.round(b) + '" aria-valuenow="' + Math.round(A.spend) + '" aria-valuetext="' + esc(money(A.spend) + ' of ' + money(b)) + '">' +
-      '<span style="width:' + Math.min(100, A.spend / b * 100).toFixed(1) + '%"></span>' +
-      (A.isCurrent ? '<i class="pace" style="left:' + (pace * 100).toFixed(1) + '%" title="Even pace for today"></i>' : '') + '</div>';
-    sub = left >= 0
-      ? esc(money(left)) + ' left of ' + esc(money(b)) + (A.isCurrent ? ' · about ' + esc(moneyR(left / daysIncl)) + ' a day for ' + plural(daysIncl, 'day') : '')
-      : esc(money(-left)) + ' over your ' + esc(money(b)) + ' budget';
-  } else {
-    sub = '<button type="button" class="link" data-act="tab" data-arg="budgets">Set a monthly budget</button> to see if you are on pace.';
-  }
-  const stats = [];
-  stats.push(['Income', A.income ? '<span class="in">' + esc(money(A.income)) + '</span>' : esc(money(0))]);
-  if (A.income > 0) stats.push(['Saved', esc(money(A.saved)) + ' <small>' + pct(A.savingsRate) + '</small>']);
-  else stats.push(['Invested', esc(money(A.invest))]);
-  if (A.isCurrent && A.dayIndex >= 3) stats.push(['Projected', esc(money(niceRound(A.projection)))]);
-  else stats.push(['Per day', esc(money(Math.round(A.avgPerDay)))]);
-  return '<section class="hero card">' +
-    '<div class="hero-top"><span class="eyebrow">Spent ' + (A.isCurrent ? 'this month' : 'in ' + esc(periodLabel(A.p))) + '</span>' + chip + '</div>' +
-    '<div class="hero-num">' + esc(money(A.spend)) + '</div>' + meter +
-    '<p class="hero-sub">' + sub + '</p>' +
-    '<dl class="hero-stats">' + stats.map(s => '<div><dt>' + s[0] + '</dt><dd>' + s[1] + '</dd></div>').join('') + '</dl>' +
-    '</section>';
+    meter = '<div class="meter tone-' + tone + '" role="meter" aria-label="Budget used" aria-valuemin="0" aria-valuemax="' + Math.round(b) + '" aria-valuenow="' + Math.round(A.spend) + '"><span style="width:' + Math.min(100, A.spend / b * 100).toFixed(1) + '%"></span>' + (A.isCurrent ? '<i class="pace" style="left:' + (A.dayIndex / A.p.days * 100).toFixed(1) + '%" title="Even pace for today"></i>' : '') + '</div>';
+    sub = left >= 0 ? esc(money(left)) + ' left of ' + esc(money(b)) + (A.isCurrent ? ' · about ' + esc(moneyR(left / (A.daysLeft + 1))) + ' a day' : '') : esc(money(-left)) + ' over your ' + esc(money(b)) + ' budget';
+  } else sub = 'Add your income and fixed costs to see what is safe to spend.';
+  return '<section class="glass hero refract"><div class="hero-top"><span class="eyebrow">Spent ' + (A.isCurrent ? 'this month' : 'in ' + esc(periodLabel(A.p))) + '</span>' + chip + '</div>' +
+    '<div class="hero-num" data-count="' + Math.round(A.spend) + '" data-key="hero">' + esc(moneyR(A.spend)) + '</div>' + meter +
+    '<p class="hero-sub">' + sub + '</p><dl class="hero-stats"><div><dt>Income</dt><dd>' + esc(moneyR(A.income)) + '</dd></div><div><dt>Saved</dt><dd>' + (A.income > 0 ? esc(moneyR(A.saved)) + ' <small>' + pct(A.savingsRate) + '</small>' : '–') + '</dd></div><div><dt>' + (A.isCurrent && A.dayIndex >= 3 ? 'Projected' : 'Per day') + '</dt><dd>' + esc(A.isCurrent && A.dayIndex >= 3 ? money(niceRound(A.projection)) : moneyR(A.avgPerDay)) + '</dd></div></dl>' +
+    (getPlan().exists ? '' : '<div class="hero-cta"><button type="button" class="btn primary" data-act="tab" data-arg="plan">' + ic('plan') + 'Plan your month</button></div>') + '</section>';
+}
+function personHeroHTML(A) {
+  const who = UI.person, name = who === 'joint' ? 'Shared' : memberName(who);
+  const label = who === 'joint' ? 'Shared spending' : name + '’s spending';
+  return '<section class="glass hero refract"><div class="hero-top"><span class="eyebrow">' + esc(label) + (A.isCurrent ? ' this month' : '') + '</span>' + avatarHTML(who) + '</div>' +
+    '<div class="hero-num" data-count="' + Math.round(A.spend) + '" data-key="hero">' + esc(moneyR(A.spend)) + '</div>' +
+    '<p class="hero-sub">' + (A.prevToDate > 0 && A.isCurrent ? esc(deltaText(A.spend, A.prevToDate, true, 'the same day last month').text) : esc(plural(A.count, 'entry', 'entries'))) + '</p>' +
+    '<dl class="hero-stats"><div><dt>' + (who === 'joint' ? 'Shared income' : 'Earned') + '</dt><dd>' + esc(moneyR(A.income)) + '</dd></div><div><dt>Invested</dt><dd>' + esc(moneyR(A.invest)) + '</dd></div><div><dt>Per day</dt><dd>' + esc(moneyR(A.avgPerDay)) + '</dd></div></dl></section>';
+}
+function splitHTML(A) {
+  const s = A.split, ms = members();
+  const cards = ms.map(m => ({ id: m.id, name: m.name, spend: s[m.id].spend, income: s[m.id].income })).concat([{ id: 'joint', name: 'Shared', spend: s.joint.spend, income: s.joint.income }]);
+  const max = Math.max(1, ...cards.map(c => c.spend));
+  return '<section class="split">' + cards.map(c => '<button type="button" class="glass split-card" data-act="person" data-arg="' + c.id + '">' + avatarHTML(c.id) +
+    '<span class="sc-name">' + esc(c.name) + '</span><span class="sc-num">' + esc(compact(c.spend)) + '</span>' +
+    '<span class="sc-sub">' + (c.id === 'joint' ? 'spent together' : c.income ? esc(compact(c.income)) + ' earned' : 'spent') + '</span>' +
+    '<span class="sc-bar"><i class="' + c.id + '" style="width:' + (c.spend / max * 100).toFixed(1) + '%"></i></span></button>').join('') + '</section>';
+}
+const STATE_LABEL = { done: ['check', 'Paid'], partial: ['clock', 'Part paid'], late: ['alert', 'Late'], soon: ['bell', 'Due soon'], upcoming: ['calendar', 'Due'] };
+function billsStripHTML(A) {
+  const P = A.plan, solo = household().solo, rank = { late: 0, soon: 1, partial: 2, upcoming: 3, done: 4 };
+  const rows = P.fixed.slice().sort((a, b) => rank[a.state] - rank[b.state] || (a.due < b.due ? -1 : 1));
+  return '<section class="sec"><div class="sec-head"><h2 class="sec-h">Bills this month</h2><span class="sec-sum">' + P.doneCount + ' of ' + P.fixed.length + ' paid</span></div><div class="strip">' + rows.map(r =>
+    '<button type="button" class="glass bill st-' + r.state + '" data-act="plan-item" data-arg="' + esc(r.id) + '">' + ic(STATE_LABEL[r.state][0]) +
+    '<span class="b-name">' + esc(r.name) + '</span><span class="b-amt">' + esc(moneyR(r.amount)) + '</span>' +
+    '<span class="b-due">' + esc((r.state === 'done' ? 'Paid' : r.state === 'late' ? 'Late since ' + shortDate(r.due) : r.state === 'partial' ? moneyR(r.paid) + ' paid' : 'Due ' + (r.due === A.today ? 'today' : shortDate(r.due))) + (solo ? '' : ' · ' + memberName(r.who))) + '</span></button>').join('') + '</div></section>';
 }
 function insightItemHTML(x) {
   const toneWord = { good: 'Good', warn: 'Heads up', bad: 'Alert', info: '' }[x.tone] || '';
-  return '<li class="ins tone-' + x.tone + '"><span class="ins-ic" aria-hidden="true">' + (ICON[x.icon] || ICON.info) + '</span>' +
+  return '<li class="ins glass tone-' + x.tone + '"><span class="ins-ic" aria-hidden="true">' + (ICON[x.icon] || ICON.info) + '</span>' +
     '<p class="ins-t">' + (toneWord ? '<span class="tone-tag">' + toneWord + '</span>' : '') + esc(x.title) + '</p><p class="ins-b">' + esc(x.body) + '</p>' +
     (x.action ? '<button type="button" class="link" data-act="' + esc(x.action.act) + '" data-arg="' + esc(x.action.arg) + '">' + esc(x.action.label) + '</button>' : '') + '</li>';
 }
 function topInsightsHTML(A) {
-  const list = A.insights.slice(0, 3);
+  const list = A.insights.slice(0, 4);
   if (!list.length) return '';
-  return '<section class="sec"><div class="sec-head"><h2 class="sec-h">What stands out</h2>' + (A.insights.length > 3 ? '<button type="button" class="link" data-act="tab" data-arg="insights">All insights</button>' : '') + '</div><ul class="insights">' + list.map(insightItemHTML).join('') + '</ul></section>';
+  return '<section class="sec"><div class="sec-head"><h2 class="sec-h">What stands out</h2>' + (A.insights.length > 4 ? '<button type="button" class="link" data-act="tab" data-arg="insights">All insights</button>' : '') + '</div><ul class="ins-row">' + list.map(insightItemHTML).join('') + '</ul></section>';
 }
 function recentHTML(A) {
-  const list = (A.isCurrent ? sortedEntries() : A.entries).slice(0, 8);
-  const body = list.length ? dayGroupsHTML(list, false) : '<div class="empty"><h3>Nothing logged in ' + esc(periodLabel(A.p)) + '</h3><p>Entries you add for these dates show up here.</p></div>';
+  const base = A.isCurrent ? (UI.person === 'all' ? sortedEntries() : sortedEntries().filter(e => whoOf(e) === UI.person)) : A.entries;
+  const list = base.slice(0, 8);
+  const body = list.length ? dayGroupsHTML(list, false) : '<div class="empty glass"><h3>Nothing logged in ' + esc(periodLabel(A.p)) + '</h3><p>Entries you add for these dates show up here.</p></div>';
   return '<section class="sec"><div class="sec-head"><h2 class="sec-h">' + (A.isCurrent ? 'Latest entries' : 'Entries') + '</h2><button type="button" class="link" data-act="tab" data-arg="activity">See all</button></div>' + body + '</section>';
+}
+
+/* ---------- plan ---------- */
+function planSetupHTML(A) {
+  const quick = [['income', 'salary', 'Salary'], ['fixed', 'home', 'Rent'], ['fixed', 'emi', 'EMI'], ['fixed', 'sendhome', 'Sending home'], ['fixed', 'insurance', 'Insurance']];
+  return '<section class="greet"><h1>Plan your <em>month</em></h1><p>Tell the app what comes in and what is already spoken for. It works out what is safe to spend, every day.</p></section>' +
+    '<section class="glass card setup"><ol class="steps">' +
+    '<li><b>Money in.</b> Salaries, freelance work, rent you receive, interest.</li>' +
+    '<li><b>Fixed costs.</b> Rent, EMIs, sending home, insurance, SIPs.</li>' +
+    '<li><b>Saving goal.</b> What you want to keep every month.</li></ol>' +
+    '<div class="try-row">' + quick.map(q => '<button type="button" class="chip-btn" data-act="plan-quick" data-arg="' + q[0] + ':' + q[1] + ':' + esc(q[2]) + '">' + ic('plus') + esc(q[2]) + '</button>').join('') + '<button type="button" class="chip-btn" data-act="plan-goal">' + ic('plus') + 'Saving goal</button></div>' +
+    '<div class="welcome-cta">' + (A.total ? '<button type="button" class="btn primary" data-act="plan-suggest">' + ic('sparkle') + 'Fill it in from our entries</button>' : '<button type="button" class="btn primary" data-act="plan-new" data-arg="income">' + ic('plus') + 'Add income</button>') + '</div></section>';
+}
+function eqItem(label, v, key) { return '<div class="eq-item' + (key ? ' ' + key : '') + '"><span>' + label + '</span><b>' + esc(compact(v)) + '</b></div>'; }
+function planRowHTML(r, today) {
+  const c = catById(r.cat, r.kind === 'income' ? 'income' : 'expense'), solo = household().solo;
+  const doneWord = r.kind === 'income' ? 'Received' : 'Paid';
+  const st = { done: doneWord, partial: moneyR(r.paid) + ' of ' + moneyR(r.amount), late: (r.kind === 'income' ? 'Expected ' : 'Late · due ') + shortDate(r.due), soon: 'Due ' + (r.due === today ? 'today' : shortDate(r.due)), upcoming: 'Due ' + shortDate(r.due) }[r.state];
+  return '<div class="pl-row st-' + r.state + '">' + avatarHTML(r.who) +
+    '<button type="button" class="pl-main" data-act="plan-edit" data-arg="' + esc(r.id) + '"><span class="pl-name"><span aria-hidden="true">' + esc(c.emoji) + '</span> ' + esc(r.name) + '</span>' +
+    '<span class="pl-meta">' + esc((solo ? '' : memberName(r.who) + ' · ') + ordinal(r.day) + ' of the month' + (r.auto ? ' · adds itself' : '')) + '</span></button>' +
+    '<span class="pl-right"><b>' + esc(moneyR(r.amount)) + '</b><span class="pl-st">' + ic(STATE_LABEL[r.state][0]) + esc(st) + '</span></span>' +
+    (r.state === 'done' ? '<span class="pl-done" aria-hidden="true">' + ICON.check + '</span>' : '<button type="button" class="mini-btn" data-act="plan-pay" data-arg="' + esc(r.id) + '">' + doneWord + '</button>') + '</div>';
+}
+function planListHTML(title, rows, kind, A) {
+  const P = A.plan;
+  const sumTxt = kind === 'income' ? compact(P.incomeActual) + ' of ' + compact(P.expectedIncome) + ' in' : compact(P.fixedPaid) + ' of ' + compact(P.fixedTotal) + ' paid';
+  return '<section class="sec"><div class="sec-head"><h2 class="sec-h">' + title + '</h2><span class="sec-sum">' + esc(sumTxt) + '</span></div><div class="glass list">' +
+    rows.map(r => planRowHTML(r, A.today)).join('') +
+    '<button type="button" class="pl-add" data-act="plan-new" data-arg="' + kind + '">' + ic('plus') + (kind === 'income' ? 'Add income' : 'Add a fixed cost') + '</button></div></section>';
+}
+function envelopesHTML(A) {
+  const b = budgets(), P = A.plan, ids = Object.keys(b.cats);
+  const assigned = sum(ids.map(id => b.cats[id]));
+  let h = '<section class="sec"><div class="sec-head"><h2 class="sec-h">Everyday budgets</h2>' + (A.priorCount || A.count > 10 ? '<button type="button" class="link" data-act="budget-suggest">Suggest</button>' : '') + '</div><div class="glass list">';
+  if (P && P.flexible > 0) h += '<p class="env-note">' + esc(compact(assigned) + ' of your ' + compact(P.flexible) + ' everyday money is set aside for categories' + (P.flexible - assigned > 0 ? ' · ' + compact(P.flexible - assigned) + ' free' : '')) + '</p>';
+  for (const id of ids.sort((x, y) => b.cats[y] - b.cats[x])) {
+    const c = catById(id), lim = b.cats[id], v = A.byCat.get(id), spent = v ? v.total : 0, left = lim - spent;
+    const tone = left < 0 ? 'bad' : (A.isCurrent && spent / lim > A.dayIndex / A.p.days + 0.15 && spent / lim >= 0.6 ? 'warn' : 'good');
+    h += '<button type="button" class="bud-row" data-act="budget-edit" data-arg="' + esc(id) + '"><span class="badge" aria-hidden="true">' + esc(c.emoji) + '</span><span class="t">' + esc(c.name) + '</span><span class="v">' + esc(moneyR(spent)) + ' <span class="muted">/ ' + esc(moneyR(lim)) + '</span></span>' +
+      '<span class="meter sm tone-' + tone + '" aria-hidden="true"><span style="width:' + Math.min(100, spent / lim * 100).toFixed(1) + '%"></span>' + (A.isCurrent ? '<i class="pace" style="left:' + (A.dayIndex / A.p.days * 100).toFixed(1) + '%"></i>' : '') + '</span>' +
+      '<span class="m">' + (left >= 0 ? esc(moneyR(left)) + ' left' : esc(moneyR(-left)) + ' over') + (tone === 'warn' ? ' · ahead of pace' : '') + '</span></button>';
+  }
+  if (!ids.length) h += '<p class="env-note">Give categories like eating out or shopping a monthly limit, and the app warns you before you go over.</p>';
+  h += '<button type="button" class="pl-add" data-act="budget-add">' + ic('plus') + 'Add a category budget</button></div></section>';
+  return h;
+}
+function planHTML() {
+  const A = analyze(UI.period, 'all');
+  if (!getPlan().exists) return planSetupHTML(A) + envelopesHTML(A);
+  const P = A.plan;
+  let h = '<section class="greet"><h1>' + (A.isCurrent ? 'This month’s <em>plan</em>' : '<em>Plan</em> for ' + esc(periodLabel(A.p))) + '</h1><p>What comes in, what is fixed and what you keep. The rest is safe to spend.</p></section>';
+  h += '<section class="glass eq refract">' + eqItem('Coming in', P.expectedIncome || P.incomeActual) + '<span class="op">−</span>' + eqItem('Fixed', P.fixedTotal) + '<span class="op">−</span>' + eqItem('Saving', P.save) + '<span class="op">=</span>' + eqItem('Everyday', P.flexible, 'res' + (P.flexible < 0 ? ' neg' : '')) + '</section>';
+  if (P.flexible < 0) h += '<p class="note-box">Planned costs and saving are ' + esc(money(-P.flexible)) + ' more than the money coming in. Lower a fixed cost or the saving goal, or add income.</p>';
+  h += '<section class="glass cc"><div class="cc-head"><div><h3>Where the money goes</h3><p class="cc-sub">Each income on the left, every planned use on the right</p></div></div><div class="chart" data-chart="flow"></div></section>';
+  h += planListHTML('Money in', P.incomes, 'income', A);
+  h += planListHTML('Fixed costs', P.fixed, 'fixed', A);
+  const g = P.save;
+  h += '<section class="sec"><div class="sec-head"><h2 class="sec-h">Saving goal</h2><button type="button" class="link" data-act="plan-goal">' + (g ? 'Change' : 'Set a goal') + '</button></div><div class="glass card goal">';
+  if (g) {
+    const prog = Math.max(0, A.projectedSave) / g, tone = prog >= 1 ? 'good' : prog >= 0.75 ? 'warn' : 'bad';
+    h += '<div class="goal-top"><b>' + esc(money(g)) + '</b><span class="chip tone-' + tone + '">' + ic(tone === 'good' ? 'check' : 'alert') + (tone === 'good' ? 'On track' : 'Behind') + '</span></div>' +
+      '<div class="meter tone-' + tone + '"><span style="width:' + Math.min(100, prog * 100).toFixed(1) + '%"></span></div>' +
+      '<p class="hero-sub">' + (A.isCurrent ? 'On course to keep ' : 'Kept ') + '<b>' + esc(moneyR(Math.max(0, A.projectedSave))) + '</b> this month, counting income minus everything spent. Investments count as saved.</p>';
+  } else h += '<p class="hero-sub">Decide how much to keep each month. It is set aside before your everyday money is worked out.</p>';
+  h += '</div></section>';
+  return h + envelopesHTML(A);
 }
 
 /* ---------- activity ---------- */
 function activityShell() {
   const types = [['all', 'All'], ['expense', 'Spending'], ['income', 'Income']];
   return '<section class="act"><div class="filters">' +
-    '<label class="search">' + ic('search') + '<span class="sr">Search entries</span><input id="act-q" type="search" placeholder="Search notes, places, #tags or amounts" autocomplete="off" enterkeyhint="search"></label>' +
+    '<label class="search glass">' + ic('search') + '<span class="sr">Search entries</span><input id="act-q" type="search" placeholder="Search notes, places, #tags or amounts" autocomplete="off" enterkeyhint="search"></label>' +
     '<div class="filter-row"><div class="chips" role="group" aria-label="Show">' + types.map(t => '<button type="button" class="chip-btn" data-act="act-type" data-arg="' + t[0] + '" aria-pressed="false">' + t[1] + '</button>').join('') + '</div>' +
-    '<select id="act-cat" class="select" aria-label="Category"></select></div></div>' +
+    '<select id="act-cat" class="select glass" aria-label="Category"></select></div></div>' +
     '<div id="act-sum" class="act-sum"></div><div id="act-list"></div></section>';
 }
 function bindActivity() {
@@ -262,13 +486,14 @@ function matchQuery(e, q) {
     const n = parseFloat(q.replace(/[^\d.]/g, ''));
     if (n > 0) return Math.abs(e.amount - n) < 0.005 || String(e.amount).indexOf(String(n)) === 0;
   }
-  const hay = (e.note + ' ' + e.merchant + ' ' + e.method + ' ' + catById(e.cat, e.type).name + ' ' + e.tags.map(t => '#' + t).join(' ')).toLowerCase();
+  const hay = (e.note + ' ' + e.merchant + ' ' + e.method + ' ' + catById(e.cat, e.type).name + ' ' + memberName(whoOf(e)) + ' ' + e.tags.map(t => '#' + t).join(' ')).toLowerCase();
   return q.split(/\s+/).every(w => hay.indexOf(w) >= 0);
 }
 function activityList() {
   const q = UI.act.q.trim().toLowerCase();
   let list = sortedEntries();
   if (!q) { const p = periodFromKey(UI.period, settings().startDay); list = list.filter(e => e.date >= p.start && e.date <= p.end); }
+  if (UI.person !== 'all') list = list.filter(e => whoOf(e) === UI.person);
   if (UI.act.type !== 'all') list = list.filter(e => e.type === UI.act.type);
   if (UI.act.cat) list = list.filter(e => e.cat === UI.act.cat);
   if (q) list = list.filter(e => matchQuery(e, q));
@@ -288,17 +513,18 @@ function updateActivity() {
   const list = activityList();
   const spent = sum(list.filter(e => kindOf(e) === 'spend'), e => e.amount), inc = sum(list.filter(e => e.type === 'income'), e => e.amount);
   const p = periodFromKey(UI.period, settings().startDay);
-  $('#act-sum').innerHTML = list.length ? '<span>' + plural(list.length, 'entry', 'entries') + (UI.act.q.trim() ? ' · searching all dates' : ' · ' + esc(periodLabel(p))) + '</span><span>Spent <b>' + esc(money(spent)) + '</b>' + (inc ? ' · Income <b class="in">' + esc(money(inc)) + '</b>' : '') + '</span>' : '';
+  const who = UI.person === 'all' ? '' : ' · ' + (UI.person === 'joint' ? 'shared' : memberName(UI.person));
+  $('#act-sum').innerHTML = list.length ? '<span>' + plural(list.length, 'entry', 'entries') + (UI.act.q.trim() ? ' · all dates' : ' · ' + esc(periodLabel(p))) + esc(who) + '</span><span>Spent <b>' + esc(money(spent)) + '</b>' + (inc ? ' · Income <b class="in">' + esc(money(inc)) + '</b>' : '') + '</span>' : '';
   const shown = list.slice(0, UI.actLimit);
   let h;
   if (!list.length) {
-    h = UI.act.q.trim() || UI.act.cat || UI.act.type !== 'all'
-      ? '<div class="empty"><h3>No entries match</h3><p>Try fewer words, or clear the filters.</p><button type="button" class="btn" data-act="act-clear">Clear filters</button></div>'
-      : '<div class="empty"><h3>Nothing logged in ' + esc(periodLabel(p)) + '</h3><p>Add one below, like <b>' + esc(exampleTry()[0]) + '</b>.</p></div>';
+    h = UI.act.q.trim() || UI.act.cat || UI.act.type !== 'all' || UI.person !== 'all'
+      ? '<div class="empty glass"><h3>No entries match</h3><p>Try fewer words, or clear the filters.</p><button type="button" class="btn" data-act="act-clear">Clear filters</button></div>'
+      : '<div class="empty glass"><h3>Nothing logged in ' + esc(periodLabel(p)) + '</h3><p>Add one below, like <b>' + esc(exampleTry()[0]) + '</b>.</p></div>';
   } else {
     h = dayGroupsHTML(shown, true);
     if (list.length > shown.length) h += '<button type="button" class="btn more" data-act="act-more">Show ' + Math.min(300, list.length - shown.length) + ' more</button>';
-    else h += '<div class="grand"><span>Total spent</span><span class="v">' + esc(money(spent)) + '</span></div>';
+    else h += '<div class="grand glass"><span>Total spent</span><span class="v">' + esc(money(spent)) + '</span></div>';
   }
   $('#act-list').innerHTML = h;
 }
@@ -317,17 +543,17 @@ function insightsShell() {
   const ask = intro ? intro : '<div id="ask-review"></div><div id="ask-log" class="ask-log" aria-live="polite"></div>' +
     '<form id="ask-form" class="ask-form"><label class="sr" for="ask-q">Ask a question</label><input id="ask-q" placeholder="Ask anything about your money" autocomplete="off" enterkeyhint="send"><button type="submit" class="btn primary" id="ask-go">Ask</button></form>' +
     '<div class="sugg" id="ask-sugg"></div>';
-  return '<div id="ins-kpis"></div><section class="card ask" id="ask"><div class="ask-head"><h2 class="sec-h">Ask about your money</h2>' + (intro ? '' : '<button type="button" class="link" data-act="review">Write my month in review</button>') + '</div>' + ask + '</section><div id="ins-body"></div>';
+  return '<div id="ins-kpis"></div><section class="glass ask" id="ask"><div class="ask-head"><h2 class="sec-h">' + ic('spark') + 'Ask about your money</h2>' + (intro ? '' : '<button type="button" class="link" data-act="review">Month in review</button>') + '</div>' + ask + '</section><div id="ins-body"></div>';
 }
 function bindInsights() {
   const f = $('#ask-form');
   if (f) f.addEventListener('submit', ev => { ev.preventDefault(); const q = $('#ask-q'); const v = q.value; q.value = ''; askSubmit(v); });
 }
 function kpiHTML(label, value, delta) {
-  return '<div class="card kpi"><div class="kpi-l">' + label + '</div><div class="kpi-v">' + value + '</div>' + (delta ? '<div class="kpi-d ' + (delta.tone || '') + '">' + delta.text + '</div>' : '<div class="kpi-d">&nbsp;</div>') + '</div>';
+  return '<div class="glass kpi"><div class="kpi-l">' + label + '</div><div class="kpi-v">' + value + '</div>' + (delta ? '<div class="kpi-d ' + (delta.tone || '') + '">' + delta.text + '</div>' : '<div class="kpi-d">&nbsp;</div>') + '</div>';
 }
 function deltaText(now, then, upIsBad, versus) {
-  if (!(then > 0)) return null;
+  if (!(then > 0)) return { text: '' };
   const d = (now - then) / then;
   if (Math.abs(d) < 0.005) return { text: 'Same as ' + versus };
   const up = d > 0;
@@ -345,7 +571,7 @@ function kpisHTML(A) {
 }
 function chartCard(id, title, sub, legend, inner, tableHTML) {
   const showTable = !!UI.tables[id];
-  return '<section class="card cc"><div class="cc-head"><div><h3>' + title + '</h3>' + (sub ? '<p class="cc-sub">' + sub + '</p>' : '') + '</div>' +
+  return '<section class="glass cc"><div class="cc-head"><div><h3>' + title + '</h3>' + (sub ? '<p class="cc-sub">' + sub + '</p>' : '') + '</div>' +
     (tableHTML ? '<button type="button" class="tbl-toggle" data-act="toggle-table" data-arg="' + id + '" aria-pressed="' + showTable + '">' + (showTable ? 'Chart' : 'Table') + '</button>' : '') + '</div>' +
     (legend && !showTable ? '<ul class="legend">' + legend + '</ul>' : '') +
     (showTable ? '<div class="tbl-wrap">' + tableHTML + '</div>' : inner) + '</section>';
@@ -357,9 +583,7 @@ function categoryBarsHTML(A) {
   if (!rows.length) return '<p class="muted">No spending yet in this period.</p>';
   const max = rows[0][1].total;
   return '<div class="cbars">' + rows.map(([id, v]) => {
-    const c = catById(id);
-    const avg = A.avgCat.get(id) || 0;
-    const expected = A.isCurrent ? avg * (A.dayIndex / A.p.days) : avg;
+    const c = catById(id), avg = A.avgCat.get(id) || 0, expected = A.isCurrent ? avg * (A.dayIndex / A.p.days) : avg;
     let delta = '';
     if (v.kind === 'spend' && A.priorCount >= 1 && expected > 0) {
       const d = v.total / expected - 1;
@@ -372,12 +596,34 @@ function categoryBarsHTML(A) {
       '<span class="cbar-sub">' + esc(share + ' · ' + plural(v.count, 'entry', 'entries') + bud) + '</span></button>';
   }).join('') + '</div>';
 }
+function whoBarsHTML(A) {
+  const rows = Array.from(A.catWho.entries()).sort((a, b) => b[1].total - a[1].total).slice(0, 8);
+  if (!rows.length) return '<p class="muted">No spending yet in this period.</p>';
+  const max = rows[0][1].total;
+  return '<div class="sbars">' + rows.map(([id, v]) => {
+    const c = catById(id);
+    const parts = ['p1', 'p2', 'joint'].filter(w => v[w] > 0);
+    return '<div class="sbar"><div class="sbar-head"><span><span aria-hidden="true">' + esc(c.emoji) + '</span> ' + esc(c.name) + '</span><b>' + esc(money(v.total)) + '</b></div>' +
+      '<div class="sbar-track" style="width:' + Math.max(4, v.total / max * 100).toFixed(1) + '%" role="img" aria-label="' + esc(parts.map(w => memberName(w) + ' ' + money(v[w])).join(', ')) + '">' + parts.map(w => '<i class="' + w + '" style="flex:' + v[w].toFixed(2) + '"></i>').join('') + '</div>' +
+      '<div class="sbar-sub">' + esc(parts.map(w => memberName(w) + ' ' + compact(v[w])).join(' · ')) + '</div></div>';
+  }).join('') + '</div>';
+}
+function incomeSourcesHTML(A) {
+  const rows = Array.from(A.incomeBy.entries()).sort((a, b) => b[1].total - a[1].total);
+  if (!rows.length) return '<p class="muted">No income logged in this period yet. Try “salary 85000 credited”.</p>';
+  const solo = household().solo;
+  return '<ul class="plain">' + rows.map(([id, v]) => {
+    const c = catById(id, 'income');
+    const who = solo ? '' : ['p1', 'p2', 'joint'].filter(w => v[w] > 0).map(w => memberName(w) + ' ' + compact(v[w])).join(' · ');
+    return '<li><span><span aria-hidden="true">' + esc(c.emoji) + '</span> ' + esc(c.name) + '</span><b>' + esc(money(v.total)) + '</b><span class="m">' + esc(pct(v.total / Math.max(1, A.income)) + ' of income' + (who ? ' · ' + who : '')) + '</span></li>';
+  }).join('') + '</ul>';
+}
 function nwsHTML(A) {
   const inc = A.income;
   const saved = inc > 0 ? Math.max(0, inc - A.needs - A.wants) : A.invest;
   const total = inc > 0 ? Math.max(inc, A.needs + A.wants) : A.needs + A.wants + A.invest;
   if (total <= 0) return '<p class="muted">Log some spending to see the split.</p>';
-  const segs = [['s1', 'Needs', A.needs, 'rent, bills, groceries, transport, health'], ['s2', 'Wants', A.wants, 'eating out, shopping, fun, travel'], ['s3', inc > 0 ? 'Saved' : 'Invested', saved, inc > 0 ? 'income not spent, investments included' : 'SIPs, deposits and investments']];
+  const segs = [['s1', 'Needs', A.needs, 'rent, bills, groceries, sending home'], ['s2', 'Wants', A.wants, 'eating out, shopping, fun, travel'], ['s3', inc > 0 ? 'Saved' : 'Invested', saved, inc > 0 ? 'income not spent, investments included' : 'SIPs, deposits and investments']];
   return '<div class="nws-bar" role="img" aria-label="' + esc(segs.map(s => s[1] + ' ' + pct(s[2] / total)).join(', ')) + '">' + segs.filter(s => s[2] > 0).map(s => '<span class="' + s[0] + '" style="flex:' + s[2].toFixed(2) + '"></span>').join('') + '</div>' +
     '<ul class="nws-legend">' + segs.map(s => '<li><i class="key-rect ' + s[0] + '"></i><span>' + s[1] + ' <span class="muted">· ' + s[3] + '</span></span><b>' + esc(money(s[2])) + ' · ' + pct(s[2] / total) + '</b></li>').join('') + '</ul>' +
     '<p class="cc-sub" style="margin-top:10px">A common guideline is 50% needs, 30% wants and 20% saved.</p>';
@@ -392,41 +638,47 @@ function placesHTML(A) {
   return '<ul class="plain">' + A.topPlaces.map(p => '<li><span>' + esc(p.name) + '</span><b>' + esc(money(p.total)) + '</b><span class="m">' + esc(plural(p.count, 'time') + ' · ' + catById(p.cat).name) + '</span></li>').join('') + '</ul>';
 }
 function subsHTML(A) {
-  if (!A.subs.length) return '<p class="muted">Charges that repeat every month show up here, from repeating entries or ones I spot in your history.</p>';
+  if (!A.subs.length) return '<p class="muted">Charges that repeat every month show up here, from repeating entries or ones spotted in your history.</p>';
   const every = { weekly: 'every week', monthly: 'every month', yearly: 'every year' };
   return '<ul class="plain">' + A.subs.slice(0, 10).map(s => '<li><span>' + esc(s.name) + '</span><b>' + esc(moneyR(s.monthly)) + '<span class="muted"> /mo</span></b><span class="m">' + esc(money(s.amount) + ' ' + every[s.every] + (s.next ? ' · next ' + shortDate(s.next) : '') + (s.rule ? '' : ' · spotted in history')) + '</span></li>').join('') +
     '<li><span><b>Total</b></span><b>' + esc(moneyR(sum(A.subs, s => s.monthly))) + '<span class="muted"> /mo</span></b><span class="m">' + esc(moneyR(sum(A.subs, s => s.monthly) * 12)) + ' a year</span></li></ul>';
 }
 function updateInsights() {
-  const A = analyze(UI.period);
+  const A = analyze(UI.period, UI.person);
   $('#ins-kpis').innerHTML = Store.entries.size ? kpisHTML(A) : '';
   renderAsk();
   const body = $('#ins-body');
   if (!Store.entries.size) {
-    body.innerHTML = '<div class="empty"><h3>Insights appear as you log</h3><p>Add a few entries, or explore with example data to see what this page can tell you.</p><button type="button" class="btn" data-act="examples">' + ic('sparkle') + 'Explore with example data</button></div>';
+    body.innerHTML = '<div class="empty glass"><h3>Insights appear as you log</h3><p>Add a few entries, or explore with example data to see what this page can tell you.</p><button type="button" class="btn" data-act="examples">' + ic('sparkle') + 'Explore with example data</button></div>';
     return;
   }
-  const pl = esc(periodLabel(A.p));
+  const pl = esc(periodLabel(A.p)), solo = household().solo;
   let h = '';
-  if (A.insights.length) h += '<section class="sec"><h2 class="sec-h">What stands out</h2><ul class="insights" style="margin-top:8px">' + A.insights.map(insightItemHTML).join('') + '</ul></section>';
-  h += '<section class="sec"><h2 class="sec-h">Where your money went</h2>';
+  if (A.insights.length) h += '<section class="sec"><h2 class="sec-h">What stands out</h2><ul class="ins-list">' + A.insights.map(insightItemHTML).join('') + '</ul></section>';
+  if (UI.person === 'all' && !solo) {
+    h += '<section class="sec"><h2 class="sec-h">Who spends on what</h2>';
+    h += chartCard('who', 'By person and category', 'Each bar splits a category between you', keyRect('var(--p1)', esc(memberName('p1'))) + keyRect('var(--p2)', esc(memberName('p2'))) + keyRect('var(--pj)', 'Shared'), whoBarsHTML(A), '');
+    h += '</section>';
+  }
+  h += '<section class="sec"><h2 class="sec-h">Where the money went</h2>';
   h += chartCard('pace', 'Running total', A.isCurrent ? 'Spending so far this month against last month' + (A.budgetTotal ? ' and your budget' : '') : 'How spending built up through ' + pl,
-    keyLine('var(--series-1)', 'This month') + (A.isCurrent && A.dayIndex < A.p.days ? keyLine('var(--series-1)', 'Projected', true) : '') + keyLine('var(--muted-line)', 'Last month') + (A.budgetTotal ? keyLine('var(--budget-line)', 'Budget') : ''),
+    keyLine('var(--s1)', 'This month') + (A.isCurrent && A.dayIndex < A.p.days ? keyLine('var(--s1)', 'Projected', true) : '') + keyLine('var(--muted-line)', 'Last month') + (A.budgetTotal ? keyLine('var(--budget-line)', 'Budget') : ''),
     '<div class="chart" data-chart="pace"></div>', paceTable(A));
   h += chartCard('cats', 'By category', 'Tap a category to see its entries' + (A.priorCount ? '. Arrows compare with your usual pace.' : '.'), '', categoryBarsHTML(A), '');
-  h += chartCard('trend', 'Month by month', 'Spending and income for up to six months', keyRect('var(--series-1)', 'Spent') + keyRect('var(--series-3)', 'Income'), '<div class="chart" data-chart="trend"></div>', trendTable(A));
+  h += chartCard('trend', 'Month by month', 'Spending and income for up to six months', keyRect('var(--s1)', 'Spent') + keyRect('var(--s3)', 'Income'), '<div class="chart" data-chart="trend"></div>', trendTable(A));
+  h += chartCard('income', 'Income sources', 'Salary, freelance, rent received, interest and more', '', incomeSourcesHTML(A), '');
   h += '</section><section class="sec"><h2 class="sec-h">Habits</h2><div class="grid2">';
-  h += chartCard('heat', 'Day by day', 'Darker days cost more', '', heatmapHTML(A), '');
-  h += chartCard('weekday', 'Weekday rhythm', 'Average day-to-day spend over the last 13 weeks, without rent and bills', '', '<div class="chart" data-chart="weekday"></div>', weekdayTable(A));
+  h += chartCard('heat', 'Day by day', 'Brighter days cost more', '', heatmapHTML(A), '');
+  h += chartCard('weekday', 'Weekday rhythm', 'Average day-to-day spend over the last 13 weeks, without fixed costs', '', '<div class="chart" data-chart="weekday"></div>', weekdayTable(A));
   h += chartCard('nws', 'Needs, wants and saving', inA(A), '', nwsHTML(A), '');
   h += chartCard('methods', 'How you paid', 'Spending and investing by payment method', '', methodsHTML(A), '');
-  h += chartCard('places', 'Top places', 'Where you spent the most', '', placesHTML(A), '');
+  h += chartCard('places', 'Top places', 'Where the most went', '', placesHTML(A), '');
   h += chartCard('subs', 'Repeating charges', 'Subscriptions and bills, as a monthly cost', '', subsHTML(A), '');
   h += '</div></section>';
   body.innerHTML = h;
   drawCharts(A);
 }
-function inA(A) { return A.income > 0 ? 'Share of your income ' + (A.isCurrent ? 'this month' : 'in ' + esc(periodLabel(A.p))) : 'Share of your outflow, since no income is logged'; }
+function inA(A) { return A.income > 0 ? 'Share of income ' + (A.isCurrent ? 'this month' : 'in ' + esc(periodLabel(A.p))) : 'Share of outflow, since no income is logged'; }
 function drawCharts(A) {
   for (const el of $$('#ins-body .chart[data-chart]')) {
     const k = el.dataset.chart;
@@ -439,7 +691,9 @@ function drawCharts(A) {
 
 /* ---------- ask Claude ---------- */
 function askSuggestions() {
-  return ['Where did most of my money go this month?', 'How does this month compare with last month?', 'Where can I cut back without much pain?', 'How much did I spend on food in the last 3 months?', 'Can I afford a ' + money(exAmount(20000, 1200)) + ' trip next month?'];
+  const h = household();
+  const two = !h.solo ? ['Who spent more on eating out this month, ' + h.members[0].name + ' or ' + h.members[1].name + '?'] : [];
+  return ['Where did most of our money go this month?'].concat(two, ['Are we on track with our plan?', 'Where can we cut back without much pain?', 'Can we afford a ' + money(exAmount(20000, 1200)) + ' trip next month?']);
 }
 function renderAsk() {
   const log = $('#ask-log');
@@ -452,7 +706,7 @@ function renderAsk() {
   const go = $('#ask-go');
   if (go) { go.textContent = UI.ask.busy ? 'Stop' : 'Ask'; go.type = UI.ask.busy ? 'button' : 'submit'; go.dataset.act = UI.ask.busy ? 'ask-stop' : ''; }
   const sg = $('#ask-sugg');
-  if (sg) sg.innerHTML = UI.ask.turns.length ? (UI.ask.turns.length && !UI.ask.busy ? '<button type="button" class="chip-btn" data-act="ask-clear">Start over</button>' : '') : askSuggestions().map(s => '<button type="button" class="chip-btn" data-act="ask-sugg" data-arg="' + esc(s) + '">' + esc(s) + '</button>').join('');
+  if (sg) sg.innerHTML = UI.ask.turns.length ? (!UI.ask.busy ? '<button type="button" class="chip-btn" data-act="ask-clear">Start over</button>' : '') : askSuggestions().map(s => '<button type="button" class="chip-btn" data-act="ask-sugg" data-arg="' + esc(s) + '">' + esc(s) + '</button>').join('');
   const rv = $('#ask-review');
   if (rv) {
     const r = UI.review;
@@ -463,7 +717,7 @@ function renderAsk() {
 async function askSubmit(q) {
   q = String(q || '').trim();
   if (!q || UI.ask.busy || !aiReady()) return;
-  const A = analyze(UI.period);
+  const A = analyze(UI.period, UI.person);
   UI.ask.turns.push({ role: 'user', content: q.slice(0, 800) });
   UI.ask.busy = true; UI.ask.live = ''; UI.ask.err = '';
   UI.ask.ctl = new AbortController();
@@ -482,7 +736,7 @@ async function askSubmit(q) {
 }
 async function runReview(refresh) {
   if (UI.review.busy || !aiReady()) return;
-  const A = analyze(UI.period);
+  const A = analyze(UI.period, UI.person);
   UI.review = { busy: true, text: '', err: '', ctl: new AbortController(), key: UI.period };
   renderAsk();
   try {
@@ -494,44 +748,13 @@ async function runReview(refresh) {
   } finally { UI.review.busy = false; UI.review.ctl = null; renderAsk(); }
 }
 
-/* ---------- budgets ---------- */
-function budgetsHTML() {
-  const A = analyze(UI.period), b = budgets();
-  let h = '';
-  if (b.total) {
-    const left = b.total - A.spend, tone = left < 0 ? 'bad' : (A.isCurrent && A.dayIndex >= 3 && A.projection > b.total * 1.02 ? 'warn' : 'good');
-    h += '<section class="hero card"><div class="hero-top"><span class="eyebrow">Monthly budget</span><button type="button" class="link" data-act="budget-edit" data-arg="">Change</button></div>' +
-      '<div class="hero-num">' + esc(money(b.total)) + '</div>' +
-      '<div class="meter tone-' + tone + '" role="meter" aria-label="Budget used" aria-valuemin="0" aria-valuemax="' + Math.round(b.total) + '" aria-valuenow="' + Math.round(A.spend) + '"><span style="width:' + Math.min(100, A.spend / b.total * 100).toFixed(1) + '%"></span>' + (A.isCurrent ? '<i class="pace" style="left:' + (A.dayIndex / A.p.days * 100).toFixed(1) + '%" title="Even pace for today"></i>' : '') + '</div>' +
-      '<p class="hero-sub">' + esc(money(A.spend)) + ' spent · ' + (left >= 0 ? esc(money(left)) + ' left' : esc(money(-left)) + ' over') + (A.isCurrent && left > 0 ? ' · ' + esc(moneyR(left / (A.daysLeft + 1))) + ' a day for the rest of the month' : '') + '</p>' +
-      (A.isCurrent && A.dayIndex >= 3 ? '<p class="hero-sub">At this pace the month ends near <b>' + esc(money(niceRound(A.projection))) + '</b>.</p>' : '') + '</section>';
-  } else {
-    h += '<section class="hero card"><span class="eyebrow">Monthly budget</span><h2 class="sec-h" style="margin-top:8px">Give your month a limit</h2>' +
-      '<p class="hero-sub">A budget turns on pace tracking, daily allowances and early warnings.' + (A.avgSpend > 0 ? ' You usually spend about <b>' + esc(money(niceRound(A.avgSpend))) + '</b> a month.' : '') + '</p>' +
-      '<div class="welcome-cta"><button type="button" class="btn primary" data-act="budget-edit" data-arg="">Set monthly budget</button>' + (A.priorCount || A.count > 10 ? '<button type="button" class="btn" data-act="budget-suggest">' + ic('sparkle') + 'Suggest from my spending</button>' : '') + '</div></section>';
-  }
-  const ids = Object.keys(b.cats);
-  h += '<section class="sec"><div class="sec-head"><h2 class="sec-h">Category budgets</h2>' + (ids.length && (A.priorCount || A.count > 10) ? '<button type="button" class="link" data-act="budget-suggest">Suggest</button>' : '') + '</div>';
-  if (!ids.length) h += '<p class="muted">Set limits for the categories you want to watch, like eating out or shopping.</p>';
-  for (const id of ids.sort((x, y) => b.cats[y] - b.cats[x])) {
-    const c = catById(id), lim = b.cats[id], v = A.byCat.get(id), spent = v ? v.total : 0, left = lim - spent;
-    const tone = left < 0 ? 'bad' : (A.isCurrent && spent / lim > A.dayIndex / A.p.days + 0.15 && spent / lim >= 0.6 ? 'warn' : 'good');
-    h += '<button type="button" class="bud-row" data-act="budget-edit" data-arg="' + esc(id) + '"><span class="badge" aria-hidden="true">' + esc(c.emoji) + '</span><span class="t">' + esc(c.name) + '</span><span class="v">' + esc(money(spent)) + ' <span class="muted">/ ' + esc(money(lim)) + '</span></span>' +
-      '<span class="meter sm tone-' + tone + '" aria-hidden="true"><span style="width:' + Math.min(100, spent / lim * 100).toFixed(1) + '%"></span>' + (A.isCurrent ? '<i class="pace" style="left:' + (A.dayIndex / A.p.days * 100).toFixed(1) + '%"></i>' : '') + '</span>' +
-      '<span class="m">' + (left >= 0 ? esc(money(left)) + ' left' : esc(money(-left)) + ' over') + (tone === 'warn' ? ' · ahead of pace' : '') + '</span></button>';
-  }
-  h += '<div class="welcome-cta"><button type="button" class="btn" data-act="budget-add">' + ic('plus') + 'Add a category budget</button></div></section>';
-  h += '<section class="sec"><p class="muted">Budgets repeat every month. Savings and investments, card bill payments and transfers never count against them. You can also type <b>budget food 8000</b> in the box below.</p></section>';
-  return h;
-}
-
 /* ---------- toast ---------- */
 let toastTimer = 0;
 function toast(msg, actions, ms) {
   if (!msg) return;
   const root = $('#toast-root');
   const el = document.createElement('div');
-  el.className = 'toast';
+  el.className = 'toast glass';
   el.setAttribute('role', 'status');
   const t = document.createElement('span');
   t.textContent = msg;
@@ -550,14 +773,26 @@ function toast(msg, actions, ms) {
   toastTimer = setTimeout(done, ms || 4200);
 }
 
-/* ---------- dock: live preview of what will be saved ---------- */
+/* ---------- capture: the liquid bar, live preview of what will be saved ---------- */
 let parseTimer = 0;
 function autosize() { const t = $('#entry'); t.style.height = 'auto'; t.style.height = Math.min(136, t.scrollHeight) + 'px'; updateDockHeight(); }
-function updateDockHeight() { const d = $('#dock'); if (d) document.documentElement.style.setProperty('--dock-h', d.offsetHeight + 'px'); }
+function updateDockHeight() { const d = $('#dock'); if (d) document.documentElement.style.setProperty('--dock-h', d.offsetHeight + 'px'); refractNow(); }
+function setCapOpen(open) {
+  if (UI.capOpen === open) return;
+  UI.capOpen = open;
+  $('#lbar').classList.toggle('open', open);
+  $('#entry').placeholder = open ? 'Try “' + exampleTry()[0] + '”' : 'Add';
+  setTimeout(updateDockHeight, 480);
+}
+function maybeCloseCap() {
+  const el = $('#entry');
+  if (!el.value.trim() && !Voice.on && !UI.busy && document.activeElement !== el) setCapOpen(false);
+}
 function syncDockButtons() {
   const has = $('#entry').value.trim().length > 0;
   $('#send-btn').hidden = !has || Voice.on;
   $('#mic-btn').hidden = has && !Voice.on;
+  if (has || Voice.on) setCapOpen(true);
 }
 function onEntryInput() {
   autosize();
@@ -567,8 +802,9 @@ function onEntryInput() {
   clearTimeout(parseTimer);
   parseTimer = setTimeout(() => { UI.draft = parseText($('#entry').value, parseCtx()); renderSlips(); }, 80);
 }
+function draftWho(d) { return d.who || defaultWhoFor(d.cat); }
 function slipHTML(d, i) {
-  const c = catById(d.cat, d.type), k = kindOf(d);
+  const c = catById(d.cat, d.type), k = kindOf(d), solo = household().solo;
   const meta = [];
   if (d.date !== todayStr()) meta.push(dayLabel(d.date));
   if (d.method) meta.push(d.method);
@@ -576,10 +812,12 @@ function slipHTML(d, i) {
   if (d.tags && d.tags.length) meta.push('#' + d.tags.join(' #'));
   if (k === 'invest') meta.push('counts as saving');
   if (k === 'transfer') meta.push('not counted as spending');
-  return '<div class="slip ' + d.type + (UI.busy ? ' busy' : '') + '">' +
+  const w = draftWho(d);
+  return '<div class="slip glass ' + d.type + (UI.busy ? ' busy' : '') + '"><div class="slip-chips">' +
     '<button type="button" class="slip-cat" data-act="slip-cat" data-arg="' + i + '" aria-label="Category ' + esc(c.name) + '. Change category"><span aria-hidden="true">' + esc(c.emoji) + '</span>' + esc(c.name) + '</button>' +
-    '<button type="button" class="slip-main" data-act="slip-edit" data-arg="' + i + '" aria-label="Edit before saving"><span class="slip-note">' + esc(d.note) + '</span>' + (meta.length ? '<span class="slip-meta">' + meta.map(m => '<span>' + esc(m) + '</span>').join('') + '</span>' : '') + '</button>' +
-    '<span class="slip-amt">' + (d.amount ? esc((d.type === 'income' ? '+' : '') + money(d.amount)) : '<span class="slip-need">amount?</span>') + '</span></div>';
+    (solo ? '' : '<button type="button" class="slip-who" data-act="slip-who" data-arg="' + i + '" aria-label="Whose: ' + esc(memberName(w)) + '. Change">' + avatarHTML(w, 'xs') + esc(memberName(w)) + '</button>') + '</div>' +
+    '<span class="slip-amt">' + (d.amount ? esc((d.type === 'income' ? '+' : '') + money(d.amount)) : '<span class="slip-need">amount?</span>') + '</span>' +
+    '<button type="button" class="slip-main" data-act="slip-edit" data-arg="' + i + '" aria-label="Edit before saving"><span class="slip-note">' + esc(d.note) + '</span>' + (meta.length ? '<span class="slip-meta">' + meta.map(m => '<span>' + esc(m) + '</span>').join('') + '</span>' : '') + '</button></div>';
 }
 function renderSlips() {
   const box = $('#slips');
@@ -588,8 +826,8 @@ function renderSlips() {
   let h = '';
   if (r && text && r.kind === 'command') {
     const c = r.command;
-    h = '<div class="slip"><span class="slip-cat">' + ic('target') + 'Budget</span><span class="slip-main"><span class="slip-note">' +
-      (c.cat ? 'Set the ' + esc(catById(c.cat).name) + ' budget' : c.unknown ? 'No category called “' + esc(c.unknown) + '”' : 'Set your monthly budget') + '</span></span><span class="slip-amt">' + esc(money(c.amount)) + '</span></div>' +
+    h = '<div class="slip glass"><div class="slip-chips"><span class="slip-cat">' + ic('target') + 'Budget</span></div><span class="slip-amt">' + esc(money(c.amount)) + '</span><span class="slip-main"><span class="slip-note">' +
+      (c.cat ? 'Set the ' + esc(catById(c.cat).name) + ' budget' : c.unknown ? 'No category called “' + esc(c.unknown) + '”' : 'Set your monthly budget') + '</span></span></div>' +
       '<p class="slip-hint"><span>Press <b>Enter</b> to set it</span></p>';
   } else if (r && text && r.kind === 'entries' && r.entries.length) {
     const ds = r.entries.map((d, i) => (UI.slipOver[i] ? Object.assign({}, d, UI.slipOver[i]) : d));
@@ -598,7 +836,7 @@ function renderSlips() {
     const missing = ds.some(d => !d.amount);
     const aiHelp = aiReady() && r.needsAI;
     h += '<p class="slip-hint">' + (UI.busy ? '<span>Claude is reading it…</span>' : missing && !aiHelp ? '<span>Add an amount, like <b>' + esc(exampleTry()[0]) + '</b></span>'
-      : '<span>Press <b>Enter</b> to save' + (ds.length > 1 ? ' all ' + ds.length : '') + '</span>' + (aiHelp ? '<span>Claude will double-check this one</span>' : '<span>Tap the category to change it</span>')) + '</p>';
+      : '<span>Press <b>Enter</b> to save' + (ds.length > 1 ? ' all ' + ds.length : '') + '</span>' + (aiHelp ? '<span>Claude will double-check this one</span>' : '<span>Tap a chip to change it</span>')) + '</p>';
   }
   if (box.innerHTML !== h) box.innerHTML = h;
   box.hidden = !h;
@@ -631,9 +869,9 @@ async function submitEntry(source) {
       const ai = await aiParseText(text, UI.aiCtl.signal);
       if (ai.length) {
         ai.forEach((a, i) => {
-          const o = ai.length === drafts.length ? UI.slipOver[i] : null;
+          const same = ai.length === drafts.length, o = same ? UI.slipOver[i] : null;
           if (o && o.cat) { a.cat = o.cat; a.type = catById(o.cat).type; a.catLocked = true; }
-          if (ai.length === drafts.length) a.tags = drafts[i].tags || [];
+          if (same) { a.tags = drafts[i].tags || []; a.who = (o && o.who) || drafts[i].who || a.who || ''; }
         });
         drafts = ai;
       }
@@ -651,6 +889,14 @@ async function submitEntry(source) {
   renderSlips();
   const src = source || (r.source === 'sms' ? 'sms' : 'text');
   await saveDrafts(drafts.map(d => Object.assign({}, d, { source: src })), src);
+  doneTyping();
+}
+/* on phones, put the keyboard away after a save so the result and the tabs are in view */
+function doneTyping() {
+  const el = $('#entry');
+  if (el.value.trim()) return;
+  if (document.activeElement === el && window.matchMedia && window.matchMedia('(pointer: coarse)').matches) el.blur();
+  else if (document.activeElement !== el) setCapOpen(false);
 }
 async function runCommand(cmd) {
   if (cmd.kind !== 'budget') return;
@@ -660,7 +906,8 @@ async function runCommand(cmd) {
   if (cmd.cat) nb.cats[cmd.cat] = cmd.amount; else nb.total = cmd.amount;
   try { await saveBudgets(nb); } catch (e) { toast(storeErrorText(e)); return; }
   $('#entry').value = ''; UI.draft = null; autosize(); syncDockButtons(); renderSlips();
-  toast((cmd.cat ? catById(cmd.cat).name + ' budget' : 'Monthly budget') + ' set to ' + money(cmd.amount) + ' a month', [{ label: 'View', run: () => setTab('budgets') }]);
+  doneTyping();
+  toast((cmd.cat ? catById(cmd.cat).name + ' budget' : 'Monthly budget') + ' set to ' + money(cmd.amount) + ' a month', [{ label: 'View', run: () => setTab('plan') }]);
 }
 
 /* ---------- voice ---------- */
@@ -673,6 +920,7 @@ function setMicUI(on) {
   syncDockButtons();
 }
 function dictationCoach() {
+  setCapOpen(true);
   const el = $('#entry');
   el.focus();
   const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
@@ -713,7 +961,8 @@ function toggleVoice() {
   rec.onend = () => {
     Voice.on = false; Voice.rec = null; setMicUI(false);
     if (heard && finalText.trim()) { onEntryInput(); if (settings().voiceAuto) setTimeout(() => submitEntry('voice'), 120); }
+    else maybeCloseCap();
   };
-  try { rec.start(); Voice.on = true; Voice.rec = rec; setMicUI(true); hideCoach(); }
+  try { rec.start(); Voice.on = true; Voice.rec = rec; setCapOpen(true); setMicUI(true); hideCoach(); }
   catch (e) { Voice.failed = true; dictationCoach(); }
 }

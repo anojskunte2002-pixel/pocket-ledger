@@ -52,7 +52,7 @@ T('lunch 350 and movie 500', [{ amount: 350, cat: 'food' }, { amount: 500, cat: 
 T('2 coffees 240', [{ amount: 240, cat: 'food', note: '2 coffees' }]);
 T('bread and butter 80', [{ amount: 80, cat: 'groceries' }]);
 T('two hundred fifty for chai', [{ amount: 250, cat: 'food', note: 'Chai' }]);
-T('one lakh twenty thousand bonus', [{ amount: 120000, type: 'income', cat: 'salary' }]);
+T('one lakh twenty thousand bonus', [{ amount: 120000, type: 'income', cat: 'bonus' }]);
 T('Dinner for 4 people 3200', [{ amount: 3200, cat: 'food' }]);
 T('petrol 2000 at 102 per litre', [{ amount: 2000, cat: 'transport' }]);
 T('Amazon order 1299 on credit card', [{ amount: 1299, cat: 'shopping', method: 'Credit Card', merchant: 'Amazon' }]);
@@ -96,7 +96,7 @@ T('got 500 from mom', [{ amount: 500, type: 'income', cat: 'gift_in' }]);
 T('interest 1200', [{ amount: 1200, type: 'income', cat: 'returns' }]);
 T('loan interest 3000', [{ amount: 3000, type: 'expense', cat: 'emi' }]);
 T('sold old phone 8000', [{ amount: 8000, type: 'income', cat: 'other_in' }]);
-T('rent received 15000', [{ amount: 15000, type: 'income', cat: 'other_in' }]);
+T('rent received 15000', [{ amount: 15000, type: 'income', cat: 'rental' }]);
 T('paid back 2000 to rahul', [{ amount: 2000, cat: 'transfer' }]);
 T('Mom birthday gift 2500', [{ amount: 2500, type: 'expense', cat: 'gifts' }]);
 T('apple music 99 per month', [{ amount: 99, cat: 'subs', repeat: 'monthly' }]);
@@ -124,6 +124,23 @@ T('fuel 3000 on 15/09/2026', [{ amount: 3000, date: '2026-09-15' }]);
 T('vegetables 60 day before yesterday', [{ amount: 60, cat: 'groceries', date: '2026-10-27' }]);
 T('spotify 119 yearly', [{ amount: 119, repeat: 'yearly' }]);
 T('Flight to Delhi 6,450 on 5th Nov', [{ amount: 6450, cat: 'travel', date: '2026-11-05' }]);
+
+// ---- two people: whose money it is
+const hh = Object.assign({}, ctx, { members: [{ id: 'p1', name: 'Ravi' }, { id: 'p2', name: 'Meera' }] });
+T('Meera paid 450 for groceries', [{ amount: 450, cat: 'groceries', who: 'p2', note: 'Groceries' }], hh);
+T('Ravi salary 85000', [{ amount: 85000, type: 'income', cat: 'salary', who: 'p1', note: 'Salary' }], hh);
+T('shared dinner 2400', [{ amount: 2400, cat: 'food', who: 'joint', note: 'Dinner' }], hh);
+T('our rent 22000', [{ amount: 22000, cat: 'home', who: 'joint', note: 'Rent' }], hh);
+T('coffee 120', [{ amount: 120, who: '' }], hh);
+T('sending home 10000', [{ amount: 10000, cat: 'sendhome' }], hh);
+T('Meera freelance 15000', [{ amount: 15000, type: 'income', cat: 'business', who: 'p2' }], hh);
+T('dinner 1200 for Meera', [{ amount: 1200, cat: 'food', who: 'p2', note: 'Dinner' }], hh);
+T('Ravi and Meera movie 900', [{ amount: 900, cat: 'fun', who: 'joint' }], hh);
+T('diwali bonus 20000', [{ amount: 20000, type: 'income', cat: 'bonus' }], hh);
+T('shared groceries 900, Ravi petrol 2000', [{ amount: 900, who: 'joint' }, { amount: 2000, who: 'p1', cat: 'transport' }], hh);
+T('dinner 450 at Toit and shared groceries 1240', [{ amount: 450, who: '', cat: 'food' }, { amount: 1240, who: 'joint', cat: 'groceries' }], hh);
+T('shared: dinner 450 and movie 500', [{ amount: 450, who: 'joint' }, { amount: 500, who: 'joint' }], hh);
+T('Meera paid 450 for dinner and Ravi cab 230', [{ amount: 450, who: 'p2', cat: 'food' }, { amount: 230, who: 'p1', cat: 'transport' }], hh);
 
 // ---- budget commands
 T('budget food 8000', { kind: 'command' });

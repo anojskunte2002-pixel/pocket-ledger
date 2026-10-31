@@ -53,9 +53,10 @@ function catGridHTML(type, sel) {
 function openEditor(src, opts) {
   opts = opts || {};
   const existing = src && src.id && Store.entries.get(src.id);
-  const base = { type: 'expense', amount: 0, cat: '', date: todayStr(), note: '', merchant: '', method: '', repeat: '', tags: [] };
+  const base = { type: 'expense', amount: 0, cat: '', date: todayStr(), note: '', merchant: '', method: '', repeat: '', tags: [], who: '' };
   const d = Object.assign(base, JSON.parse(JSON.stringify(existing || src || {})));
-  ED = { isNew: !existing, orig: existing || null, d, autoCat: d.cat, catTouched: false, foreign: opts.foreign || '', source: d.source || 'manual', raw: opts.raw || '' };
+  d.who = existing ? whoOf(existing) : (d.who || defaultWhoFor(d.cat));
+  ED = { isNew: !existing, orig: existing || null, d, autoCat: d.cat, catTouched: false, whoTouched: !!(src && src.who), foreign: opts.foreign || '', source: d.source || 'manual', raw: opts.raw || '' };
   openSheet(editorHTML(), { label: ED.isNew ? 'New entry' : 'Edit entry', onMount: bindEditor });
 }
 function editorHTML() {
@@ -71,12 +72,14 @@ function editorHTML() {
     '<p class="calc" id="ed-calc">Sums work too, like 120+80.</p>' +
     '<label class="field"><span>What was it?</span><input id="ed-note" maxlength="120" autocomplete="off" value="' + esc(d.note) + '" placeholder="Coffee with Sam"></label>' +
     '<div class="field"><span>Category</span><div class="cat-grid" id="ed-cats">' + catGridHTML(d.type, d.cat) + '</div></div>' +
+    (household().solo ? '' : '<div class="field"><span>Whose money</span><div class="who-pick" id="ed-who" role="radiogroup" aria-label="Whose money">' + whoPickHTML('ed-who', d.who) + '</div></div>') +
     '<div class="row2"><label class="field"><span>Date</span><input type="date" id="ed-date" value="' + esc(d.date) + '"></label>' +
     '<label class="field"><span>Place or person</span><input id="ed-merchant" maxlength="60" autocomplete="off" value="' + esc(d.merchant) + '" placeholder="Optional"></label></div>' +
     '<div class="field"><span>Paid with</span><div class="chips" id="ed-methods">' + METHODS.map(m => '<button type="button" class="chip-btn" data-act="ed-method" data-arg="' + esc(m) + '" aria-pressed="' + (d.method === m) + '">' + esc(m) + '</button>').join('') + '</div></div>' +
     (isNew ? '<div class="field"><span>Repeats</span><div class="chips" id="ed-repeat">' + reps.map(r => '<button type="button" class="chip-btn" data-act="ed-repeat" data-arg="' + r[0] + '" aria-pressed="' + ((d.repeat || '') === r[0]) + '">' + r[1] + '</button>').join('') + '</div></div>'
       : rec ? '<p class="cc-sub" style="margin-top:14px">This came from an entry that repeats ' + esc(rec.every) + '. Change or stop it in Settings, under Repeating entries.</p>' : '') +
     '<label class="field"><span>Tags</span><input id="ed-tags" autocomplete="off" value="' + esc((d.tags || []).map(t => '#' + t).join(' ')) + '" placeholder="#trip #work"></label>' +
+    (!isNew && ED.orig ? byLineHTML(ED.orig) : '') +
     '</div><footer class="sh-foot">' + (isNew ? '' : '<button type="button" class="btn ghost danger" data-act="ed-delete">Delete</button><button type="button" class="btn ghost" data-act="ed-duplicate">Duplicate</button>') +
     '<span class="spacer"></span><button type="button" class="btn" data-act="close-sheet">Cancel</button><button type="button" class="btn primary" data-act="ed-save">' + (isNew ? 'Add' : 'Save') + '</button></footer>';
 }
@@ -122,7 +125,7 @@ async function editorSave() {
   } else {
     const prev = ED.orig;
     closeSheet();
-    await updateEntry(prev, { type: d.type, amount: d.amount, cat: d.cat, date: d.date, note: d.note, merchant: d.merchant, method: d.method, tags: d.tags });
+    await updateEntry(prev, { type: d.type, amount: d.amount, cat: d.cat, date: d.date, note: d.note, merchant: d.merchant, method: d.method, tags: d.tags, who: d.who || prev.who });
   }
 }
 
@@ -145,7 +148,8 @@ function openAddHub() {
     ['message', 'Paste bank messages', 'SMS or e-mail alerts, many at once', 'import-sms', true],
     ['file', 'Import a statement', 'A CSV file from your bank or card', 'import-csv', true],
     ['pencil', 'Fill in a form', 'Choose every detail yourself', 'new-entry', true],
-    ['repeat', 'Add a repeating bill', 'Rent, subscriptions, EMIs', 'new-repeat', true]
+    ['plan', 'Plan income or a bill', 'Salary, rent, EMIs, sending home', 'plan-new-fixed', true],
+    ['repeat', 'Add a repeating entry', 'Subscriptions and other regulars', 'new-repeat', true]
   ].filter(t => t[4]);
   openSheet(sheetHead('Add money in or out') + '<div class="sh-body"><p class="sh-lede">The quickest way is the box at the bottom. Type or say it like a text message.</p>' +
     '<div class="hub" style="margin-top:14px">' + tiles.map(t => '<button type="button" class="way" data-act="' + t[3] + '">' + ic(t[0]) + '<b>' + t[1] + '</b><span>' + t[2] + '</span></button>').join('') + '</div></div>', { label: 'Ways to add', wide: true });
@@ -384,7 +388,7 @@ async function budgetApply() {
 
 /* ---------- settings ---------- */
 function storageLine() {
-  if (Store.mode === 'cloud') return ic('cloud') + '<span>Saved to your Claude account and private to you. It follows you to any device where you open this page.</span>';
+  if (Store.mode === 'cloud') return ic('cloud') + '<span>' + (Store.isOwner ? 'Saved in your Claude account. People you invite with <b>Can edit</b> see and add to this same ledger, live, from their own phone.' : 'Saved in the shared household ledger in Claude. Everything you add shows up for everyone in the household.') + '</span>';
   if (Store.mode === 'device' && !IN_CLAUDE) return ic('device') + '<span>Saved privately in this browser, on this device. Nothing is sent anywhere. Download a backup to keep a copy or to move to another device.</span>';
   if (Store.mode === 'device') return ic('device') + '<span>Saved in this browser on this device only.' + (Store.reason === 'not-owner' ? ' The ledger behind this link belongs to its owner.' : ' Open the page in Claude while signed in to keep entries in your account.') + '</span>';
   return ic('alert') + '<span>Not saved: this browser blocks storage. Download a backup before closing the page.</span>';
@@ -398,6 +402,9 @@ function openSettings() {
   const rules = Object.keys(rulesMap()).length, recs = Object.values(recurringItems()).filter(r => r.active).length;
   const custom = allCats().filter(c => c.custom).length;
   openSheet(sheetHead('Settings') + '<div class="sh-body">' +
+    '<section class="set-sec"><h3>You</h3>' +
+    '<button type="button" class="set-link" data-act="household"><span class="lead">' + (household().setup ? '<span class="avatars">' + avatarHTML('p1', 'xs') + (household().solo ? '' : avatarHTML('p2', 'xs')) + '</span>' : ic('people')) + 'Household</span><span>' + esc(household().setup ? household().members.map(m => m.name).join(' & ') : 'set up') + '</span></button>' +
+    '<button type="button" class="set-link" data-act="appearance"><span class="lead">' + ic('palette') + 'Background and look</span><span>' + esc((sceneById(Prefs.scene) || sceneById(defaultScene(meId()))).name) + '</span></button></section>' +
     '<section class="set-sec"><h3>Where your data lives</h3><p class="store-line">' + storageLine() + '</p></section>' +
     '<section class="set-sec"><h3>Money</h3>' +
     '<label class="field"><span>Currency</span><select id="set-cur">' + curs.map(c => '<option value="' + c + '"' + (c === s.currency ? ' selected' : '') + '>' + c + (dn ? ' · ' + esc(dn.of(c) || '') : '') + '</option>').join('') + '</select><small>Changing it relabels amounts. It doesn’t convert them.</small></label>' +
@@ -546,7 +553,8 @@ function openCopySheet(name, data) {
     '<footer class="sh-foot"><span class="spacer"></span><button type="button" class="btn primary" data-act="copy-text">' + ic('copy') + 'Copy</button></footer>', { label: 'Copy file', wide: true });
 }
 function openWipe() {
-  openSheet(sheetHead('Delete everything?') + '<div class="sh-body"><p class="sh-lede">This removes all ' + plural(Store.entries.size, 'entry', 'entries') + ', budgets, categories, repeating entries and learned shortcuts ' + (Store.mode === 'cloud' ? 'from your account' : 'from this device') + '. It can’t be undone, so download a backup first if you might want them later.</p>' +
+  const both = Store.mode === 'cloud' && !household().solo;
+  openSheet(sheetHead('Delete everything?') + '<div class="sh-body"><p class="sh-lede">This removes all ' + plural(Store.entries.size, 'entry', 'entries') + ', the plan, budgets, categories, repeating entries and learned shortcuts ' + (Store.mode === 'cloud' ? (both ? 'for everyone in the household' : 'from your account') : 'from this device') + '. It can’t be undone, so download a backup first if you might want them later.</p>' +
     '<label class="field"><span>Type DELETE to confirm</span><input id="wipe-confirm" autocomplete="off" autocapitalize="characters" spellcheck="false"></label></div>' +
     '<footer class="sh-foot"><button type="button" class="btn" data-act="export-json">Download backup</button><span class="spacer"></span><button type="button" class="btn danger solid" id="wipe-go" data-act="wipe-go" disabled>Delete everything</button></footer>', {
     label: 'Delete everything',
@@ -571,7 +579,10 @@ function openHelp() {
       '<b>Repeats:</b> weekly, monthly, every month, yearly. Due entries add themselves.',
       '<b>Tags:</b> add #trip or #work and search for them later.',
       '<b>Budgets:</b> “budget food 8000” or “monthly budget 45000”.'
-    ]) + '</section>' +
+    ].concat(household().solo ? [] : [
+      '<b>Whose it was:</b> say a name, like “' + esc(household().members[1].name) + ' paid ' + a(450, 18) + ' for dinner” or “' + esc(household().members[0].name) + '’s cab ' + a(230, 18) + '”.',
+      '<b>Shared money:</b> “shared groceries ' + a(1240, 86) + '”, “our rent”, “for both of us”. Rent, groceries and bills count as shared unless you say otherwise.'
+    ])) + '</section>' +
     '<section class="set-sec"><h3>Other ways in</h3>' + list([
       AI.ok ? '<b>Receipts and screenshots:</b> the + button, or paste or drop an image. Claude reads the total.' : '<b>Receipts:</b> reading photos needs the Claude version of Pocket Ledger.',
       '<b>Bank messages:</b> paste many SMS or e-mail alerts at once. Balances and OTPs are ignored.',
@@ -585,4 +596,233 @@ async function openPermissions() {
     try { await UI.permissions.manage(); AI.blocked = ''; UI.mounted = ''; render(); return; } catch (e) { /* fall through */ }
   }
   toast('Open this page’s menu and choose Permissions to turn on Claude access.');
+}
+
+/* ---------- people: whose money, who added it ---------- */
+function whoPickHTML(act, sel) {
+  return ['p1', 'p2', 'joint'].map(w => '<button type="button" class="who-opt" role="radio" data-act="' + act + '" data-arg="' + w + '" aria-checked="' + (w === sel) + '">' + avatarHTML(w) + '<span>' + esc(memberName(w)) + '</span></button>').join('');
+}
+function setPicked(sel, arg, attr) { for (const b of $$(sel)) b.setAttribute(attr || 'aria-checked', String(b.dataset.arg === arg)); }
+const SOURCE_WORD = { text: 'typed', voice: 'spoken', receipt: 'read from a receipt', sms: 'from a bank message', csv: 'from a statement', recurring: 'added automatically', plan: 'from the plan', manual: 'filled in by hand', import: 'imported' };
+function byLineHTML(e) {
+  const two = !household().solo && (e.by === 'p1' || e.by === 'p2');
+  const bits = [two ? 'Added by ' + memberName(e.by) : 'Added'];
+  if (SOURCE_WORD[e.source]) bits.push(SOURCE_WORD[e.source]);
+  if (e.created > 0) bits.push(fmtDate(ymd(new Date(e.created)), { day: 'numeric', month: 'short', year: 'numeric' }));
+  return '<p class="by-line">' + (two ? avatarHTML(e.by, 'xs') : '') + '<span>' + esc(bits.join(' · ')) + '</span></p>';
+}
+
+/* ---------- the household ---------- */
+let HH = null;
+function openHousehold() {
+  const h = household();
+  HH = { two: h.setup ? !h.solo : true, n1: h.members[0] ? h.members[0].name : '', n2: h.members[1] ? h.members[1].name : '', me: meId(), shared: h.sharedDefault };
+  if (Store.meta.household && Store.meta.household.sample) { HH.n1 = ''; HH.n2 = ''; }
+  openSheet(sheetHead('Your household') + '<div class="sh-body" id="hh-body"></div><footer class="sh-foot"><span class="spacer"></span><button type="button" class="btn" data-act="close-sheet">Cancel</button><button type="button" class="btn primary" data-act="hh-save">Save</button></footer>', { label: 'Household', onMount: renderHousehold });
+}
+function hhName(id) { return (id === 'p1' ? HH.n1 : HH.n2).trim() || (id === 'p1' ? 'First person' : 'Second person'); }
+function renderHousehold() {
+  const body = $('#hh-body');
+  if (!body) return;
+  let h = '<p class="sh-lede">Track money together. Every entry knows whose it is and who added it, and you can look at one person or everyone at once.</p>' +
+    '<div class="seg full" role="radiogroup" aria-label="How many people" style="margin-top:16px"><button type="button" role="radio" data-act="hh-two" data-arg="0" aria-checked="' + !HH.two + '">Just me</button><button type="button" role="radio" data-act="hh-two" data-arg="1" aria-checked="' + HH.two + '">Two of us</button></div>' +
+    '<div class="row2"><label class="field"><span>' + (HH.two ? 'First person' : 'Your name') + '</span><input id="hh-n1" maxlength="24" autocomplete="off" value="' + esc(HH.n1) + '" placeholder="Name"' + (HH.n1 ? '' : ' autofocus') + '></label>' +
+    (HH.two ? '<label class="field"><span>Second person</span><input id="hh-n2" maxlength="24" autocomplete="off" value="' + esc(HH.n2) + '" placeholder="Name"></label>' : '') + '</div>';
+  if (HH.two) {
+    h += '<div class="field"><span>Who is using ' + (IN_CLAUDE ? 'this account' : 'this device') + '?</span><div class="who-pick" role="radiogroup" aria-label="Who is using this">' +
+      ['p1', 'p2'].map(id => '<button type="button" class="who-opt" role="radio" data-act="hh-me" data-arg="' + id + '" aria-checked="' + (HH.me === id) + '"><span class="av ' + id + '">' + esc(initials(hhName(id))) + '</span><span>' + esc(hhName(id)) + '</span></button>').join('') +
+      '</div><small>Your new entries count as yours unless you say otherwise. Your background is yours too.</small></div>' +
+      '<label class="switch"><input type="checkbox" id="hh-shared"' + (HH.shared ? ' checked' : '') + '><span>Count rent, groceries and bills as shared<br><small class="muted">Everything else counts as the person’s own. You can change any entry.</small></span></label>' + inviteHTML();
+  }
+  body.innerHTML = h;
+  const sync = () => { for (const b of $$('[data-act="hh-me"]', body)) { const n = hhName(b.dataset.arg); b.firstChild.textContent = initials(n); b.lastChild.textContent = n; } };
+  const i1 = $('#hh-n1', body), i2 = $('#hh-n2', body), sw = $('#hh-shared', body);
+  i1.addEventListener('input', () => { HH.n1 = i1.value; sync(); });
+  if (i2) i2.addEventListener('input', () => { HH.n2 = i2.value; sync(); });
+  if (sw) sw.addEventListener('change', () => { HH.shared = sw.checked; });
+  for (const i of [i1, i2]) if (i) i.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); householdSave(); } });
+}
+function inviteHTML() {
+  const other = HH.n2.trim() || 'them';
+  if (IN_CLAUDE && Store.mode === 'cloud' && Store.isOwner) {
+    return '<section class="set-sec"><h3>Invite ' + esc(HH.n2.trim() || 'your partner') + '</h3><ol class="steps-box">' +
+      '<li>Open <b>Share</b> at the top of this page.</li><li>Invite ' + esc(other) + '’s e-mail and choose <b>Can edit</b>.</li>' +
+      '<li>' + esc(other) + ' opens the link signed in to Claude. Everything either of you adds shows up for both, live.</li></ol>' +
+      '<p class="cc-sub" style="margin-top:10px">Share with invited people only, not “anyone with the link”. Reading receipts and answering questions use Claude, which may not work for people outside your Claude organization. Everything else works for both of you.</p></section>';
+  }
+  if (!IN_CLAUDE) return '<section class="set-sec"><h3>Two phones?</h3><p class="sh-lede">This website keeps entries on the device you use. To share one live ledger across two phones, use the Claude version of Pocket Ledger and invite each other there.</p></section>';
+  return '';
+}
+async function householdSave() {
+  if (!HH) return;
+  const n1 = HH.n1.trim().slice(0, 24), n2 = HH.n2.trim().slice(0, 24);
+  if (!n1) { const i = $('#hh-n1'); if (i) i.focus(); toast('Add a name first'); return; }
+  if (HH.two && !n2) { const i = $('#hh-n2'); if (i) i.focus(); toast('Add the second person’s name'); return; }
+  const members = HH.two ? [{ id: 'p1', name: n1 }, { id: 'p2', name: n2 }] : [{ id: 'p1', name: n1 }];
+  const before = meId(), me = HH.two ? HH.me : 'p1';
+  closeSheet();
+  try { await putMeta('household', { members, sharedDefault: !!HH.shared, sample: false }); } catch (e) { toast(storeErrorText(e)); return; }
+  await savePrefs({ me });
+  if (!Prefs.scene && before !== meId()) applyLook();
+  toast(HH.two ? 'Saved. Hello ' + n1 + ' & ' + n2 + '!' : 'Saved. Hello ' + n1 + '!');
+}
+
+/* ---------- background and look ---------- */
+function openAppearance() {
+  openSheet(sheetHead('Background and look') + '<div class="sh-body" id="look-body"></div>', { label: 'Background and look', wide: true, onMount: renderAppearance });
+}
+function currentSceneId() { return (sceneById(Prefs.scene) || sceneById(defaultScene(meId()))).id; }
+function renderAppearance() {
+  const body = $('#look-body');
+  if (!body) return;
+  const cur = currentSceneId(), h = household();
+  const other = h.solo ? '' : memberName(meId() === 'p1' ? 'p2' : 'p1');
+  body.innerHTML = '<p class="sh-lede">Pick the scene that lives behind your glass. ' + (other ? 'It’s yours alone: ' + esc(other) + ' picks their own.' : 'It drifts slowly and rests when the page is hidden.') + '</p>' +
+    '<div class="scene-grid">' + SCENES.map(sc => '<button type="button" class="scene-tile' + (sc.tone === 'light' ? ' lt' : '') + '" data-act="scene" data-arg="' + sc.id + '" aria-pressed="' + (sc.id === cur) + '"><span class="sw" style="background:' + esc(sceneCSS(sc)) + '"></span><b>' + esc(sc.name) + '</b><span class="tick" aria-hidden="true">' + ICON.check + '</span></button>').join('') + '</div>' +
+    '<label class="switch"><input type="checkbox" id="look-motion"' + (Prefs.motion ? ' checked' : '') + '><span>Moving background<br><small class="muted">' + (reducedMotion() ? 'Your device asks for less motion, so it stays still.' : 'Slow and gentle. Turn it off to save battery.') + '</small></span></label>' +
+    '<div class="field"><span>Glass</span><div class="seg full" role="radiogroup" aria-label="Glass effect">' + [['full', 'Liquid'], ['frosted', 'Frosted'], ['saver', 'Battery saver']].map(o => '<button type="button" role="radio" data-act="fx" data-arg="' + o[0] + '" aria-checked="' + (Prefs.fx === o[0]) + '">' + o[1] + '</button>').join('') + '</div>' +
+    '<small>' + (refractSupported() ? 'Liquid bends light at the edge of every panel.' : 'Liquid refraction needs Chrome or Edge. Here it looks frosted.') + ' Battery saver uses solid panels and a still background.</small></div>';
+  $('#look-motion', body).addEventListener('change', ev => { savePrefs({ motion: ev.target.checked }); applyLook(); });
+}
+
+/* ---------- the plan: income and fixed costs ---------- */
+let PE = null;
+function openPlanEditor(kind, id, preset) {
+  const plan = getPlan(), solo = household().solo;
+  const it = id ? plan.incomes.concat(plan.fixed).find(x => x.id === id) : null;
+  if (id && !it) return;
+  kind = it ? it.kind : (kind === 'income' ? 'income' : 'fixed');
+  const d = it ? Object.assign({}, it) : Object.assign({ id: '', kind, name: '', who: '', cat: kind === 'income' ? 'salary' : 'home', amount: 0, day: 1, auto: false }, preset || {});
+  if (!d.who) d.who = solo ? 'p1' : kind === 'income' ? meId() : (SHARED_CATS.has(d.cat) ? 'joint' : meId());
+  PE = { isNew: !it, d, whoTouched: !!it };
+  const type = kind === 'income' ? 'income' : 'expense';
+  const title = it ? (kind === 'income' ? 'Edit income' : 'Edit fixed cost') : (kind === 'income' ? 'Money coming in' : 'A fixed cost');
+  openSheet(sheetHead(title) + '<div class="sh-body">' +
+    '<p class="sh-lede">' + (kind === 'income' ? 'Salary, freelance work, rent you receive, interest: anything that arrives most months.' : 'Rent, EMIs, sending money home, insurance, SIPs: money that is spoken for before the month starts.') + '</p>' +
+    '<label class="amt-field"><span class="cur" aria-hidden="true">' + esc(curSymbol()) + '</span><span class="sr">Amount each month</span><input id="pe-amount" inputmode="decimal" autocomplete="off" placeholder="0" value="' + (d.amount ? esc(String(d.amount)) : '') + '"' + (d.amount ? '' : ' autofocus') + '></label>' +
+    '<p class="calc" id="pe-calc">Each month</p>' +
+    '<label class="field"><span>Name</span><input id="pe-name" maxlength="60" autocomplete="off" value="' + esc(d.name) + '" placeholder="' + (kind === 'income' ? 'Salary' : 'Rent') + '"></label>' +
+    '<div class="field"><span>Category</span><div class="cat-grid" id="pe-cats">' + allCats().filter(c => c.type === type && (!c.hidden || c.id === d.cat)).map(c => '<button type="button" class="cat-opt" data-act="pe-cat" data-arg="' + esc(c.id) + '" aria-pressed="' + (c.id === d.cat) + '"><span class="em" aria-hidden="true">' + esc(c.emoji) + '</span>' + esc(c.name) + '</button>').join('') + '</div></div>' +
+    (solo ? '' : '<div class="field"><span>' + (kind === 'income' ? 'Whose income' : 'Whose cost') + '</span><div class="who-pick" role="radiogroup" aria-label="Whose">' + whoPickHTML('pe-who', d.who) + '</div></div>') +
+    '<label class="field"><span>' + (kind === 'income' ? 'Usually arrives on' : 'Due on') + '</span><select id="pe-day">' + Array.from({ length: 31 }, (x, i) => i + 1).map(n => '<option value="' + n + '"' + (n === d.day ? ' selected' : '') + '>the ' + ordinal(n) + (n >= 29 ? ' (or the last day)' : '') + '</option>').join('') + '</select></label>' +
+    '<label class="switch"><input type="checkbox" id="pe-auto"' + (d.auto ? ' checked' : '') + '><span>Log it by itself on that day<br><small class="muted">Good for fixed amounts like rent or a salary. Otherwise tap ' + (kind === 'income' ? 'Received' : 'Paid') + ' when it happens.</small></span></label>' +
+    '</div><footer class="sh-foot">' + (it ? '<button type="button" class="btn ghost danger" data-act="pe-delete">Remove</button>' : '') + '<span class="spacer"></span><button type="button" class="btn" data-act="close-sheet">Cancel</button><button type="button" class="btn primary" data-act="pe-save">' + (it ? 'Save' : 'Add to plan') + '</button></footer>', {
+    label: title,
+    onMount: sh => {
+      const amt = $('#pe-amount', sh), calc = $('#pe-calc', sh);
+      amt.addEventListener('input', () => { calc.classList.remove('err'); const v = evalAmount(amt.value); calc.textContent = /[+*/x×()]|\d-\d/.test(amt.value) && v ? '= ' + money(v) + ' each month' : 'Each month'; });
+      for (const s of ['#pe-amount', '#pe-name']) $(s, sh).addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); planEditorSave(); } });
+    }
+  });
+}
+async function planEditorSave() {
+  if (!PE) return;
+  const d = PE.d;
+  d.amount = evalAmount($('#pe-amount').value);
+  if (!(d.amount > 0)) { const c = $('#pe-calc'); c.textContent = 'Enter an amount above zero.'; c.classList.add('err'); $('#pe-amount').focus(); return; }
+  d.name = $('#pe-name').value.trim() || catById(d.cat, d.kind === 'income' ? 'income' : 'expense').name;
+  d.day = clamp(parseInt($('#pe-day').value, 10) || 1, 1, 31);
+  d.auto = $('#pe-auto').checked;
+  if (!d.id) d.id = uid(d.kind === 'income' ? 'i' : 'f');
+  const isNew = PE.isNew;
+  closeSheet();
+  try { await upsertPlanItem(d); } catch (e) { toast(storeErrorText(e)); return; }
+  toast((isNew ? 'Added ' : 'Saved ') + d.name + ' · ' + money(d.amount) + ' a month');
+  materializePlan();
+}
+function openGoalEditor() {
+  const plan = getPlan(), A = analyze(UI.period, 'all');
+  const inc = A.plan ? A.plan.baseIncome : A.income;
+  const sug = inc > 0 ? niceRound(inc * 0.2) : 0;
+  openSheet(sheetHead('Saving goal') + '<div class="sh-body"><p class="sh-lede">How much do you want to keep each month? It’s set aside before your everyday money is worked out.' + (sug ? ' A common target is a fifth of income, about <b>' + esc(money(sug)) + '</b>.' : '') + '</p>' +
+    '<label class="amt-field"><span class="cur" aria-hidden="true">' + esc(curSymbol()) + '</span><span class="sr">Saving goal each month</span><input id="goal-amt" inputmode="decimal" autocomplete="off" placeholder="' + (sug || 0) + '" value="' + (plan.save ? esc(String(plan.save)) : '') + '" autofocus></label>' +
+    (sug ? '<div class="chips" style="margin-top:14px">' + [0.1, 0.2, 0.3].map(f => '<button type="button" class="chip-btn" data-act="goal-pick" data-arg="' + niceRound(inc * f) + '">' + pct(f) + ' · ' + esc(compact(niceRound(inc * f))) + '</button>').join('') + '</div>' : '') +
+    '</div><footer class="sh-foot">' + (plan.save ? '<button type="button" class="btn ghost danger" data-act="goal-remove">Remove</button>' : '') + '<span class="spacer"></span><button type="button" class="btn" data-act="close-sheet">Cancel</button><button type="button" class="btn primary" data-act="goal-save">Save</button></footer>', {
+    label: 'Saving goal', onMount: sh => $('#goal-amt', sh).addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); goalSave(); } })
+  });
+}
+async function goalSave() {
+  const v = evalAmount($('#goal-amt').value);
+  if (!(v > 0)) { $('#goal-amt').focus(); return; }
+  closeSheet();
+  try { await setPlanSave(v); toast('Saving goal set to ' + money(v) + ' a month'); } catch (e) { toast(storeErrorText(e)); }
+}
+function openPlanItem(id) {
+  const A = analyze(UI.period, 'all'), P = A.plan;
+  const r = P && P.rows.find(x => x.id === id);
+  if (!r) return;
+  const income = r.kind === 'income', doneWord = income ? 'Received' : 'Paid';
+  const st = { done: doneWord, partial: moneyR(r.paid) + ' of ' + moneyR(r.amount) + ' so far', late: (income ? 'Expected since ' : 'Late · was due ') + dayLabel(r.due), soon: 'Due ' + dayLabel(r.due), upcoming: 'Due ' + dayLabel(r.due) }[r.state];
+  const tone = r.state === 'done' ? 'good' : r.state === 'late' ? 'bad' : r.state === 'upcoming' ? '' : 'warn';
+  openSheet(sheetHead(r.name) + '<div class="sh-body"><div class="pi-head">' + avatarHTML(r.who, 'lg') + '<div><div class="pi-amt">' + esc(money(r.amount)) + '</div><span class="chip' + (tone ? ' tone-' + tone : '') + '">' + ic(STATE_LABEL[r.state][0]) + esc(st) + '</span></div></div>' +
+    '<p class="sh-lede" style="margin-top:14px">' + esc(catById(r.cat, income ? 'income' : 'expense').name + (household().solo ? '' : ' · ' + memberName(r.who)) + ' · the ' + ordinal(r.day) + ' of every month' + (r.auto ? ' · logs itself' : '')) + '</p>' +
+    (r.entries.length ? '<p class="lbl-s" style="margin-top:16px">Logged in ' + esc(periodLabel(A.p)) + '</p><div class="pi-entries list" style="border-radius:18px;background:var(--fill);margin-top:6px">' + r.entries.map(rowHTML).join('') + '</div>' : '<p class="cc-sub" style="margin-top:12px">Nothing logged for it in ' + esc(periodLabel(A.p)) + ' yet.</p>') +
+    '</div><footer class="sh-foot"><button type="button" class="btn" data-act="plan-edit" data-arg="' + esc(r.id) + '">Edit</button><span class="spacer"></span>' +
+    (r.state === 'done' ? '<button type="button" class="btn" data-act="close-sheet">Close</button>' : '<button type="button" class="btn primary" data-act="plan-pay" data-arg="' + esc(r.id) + '">' + (r.state === 'partial' ? 'Log the rest' : 'Mark ' + doneWord.toLowerCase()) + '</button>') + '</footer>', { label: r.name });
+}
+
+/* fill the plan in from what already repeats in the ledger */
+let PS = { items: [], save: 0 };
+function planSuggestions() {
+  const plan = getPlan(), today = todayStr(), since = addDays(today, -95);
+  const have = plan.incomes.concat(plan.fixed);
+  const groups = new Map(), months = new Set();
+  for (const e of sortedEntries()) {
+    if (e.date > today) continue;
+    if (e.date < since) break;
+    months.add(e.date.slice(0, 7));
+    const income = e.type === 'income';
+    const fixed = !income && (FIXED.has(e.cat) || catById(e.cat, e.type).group === 'savings' || !!e.rec);
+    if ((!income && !fixed) || (income && /^(refund|gift_in|other_in)$/.test(e.cat))) continue;
+    const name = (!income && e.merchant ? e.merchant : e.note) || catById(e.cat, e.type).name;
+    const key = (income ? 'i' : 'f') + '|' + e.cat + '|' + whoOf(e) + '|' + (ruleKeyFor(e) || normText(name).trim());
+    const g = groups.get(key) || { income, cat: e.cat, who: whoOf(e), names: new Map(), amts: [], days: [], months: new Set() };
+    g.names.set(name, (g.names.get(name) || 0) + 1); g.amts.push(e.amount); g.days.push(+e.date.slice(8)); g.months.add(e.date.slice(0, 7));
+    groups.set(key, g);
+  }
+  const out = [];
+  const known = x => have.concat(out).some(h => h.cat === x.cat && h.who === x.who && Math.abs(h.amount - x.amount) / Math.max(1, x.amount) < 0.25);
+  for (const g of groups.values()) {
+    if (g.months.size < Math.min(2, months.size)) continue;
+    const med = median(g.amts);
+    const steady = g.amts.every(a => Math.abs(a - med) <= med * 0.02);
+    const amount = steady ? round2(med) : niceRound(med * 1.05);
+    const name = cap1(Array.from(g.names.entries()).sort((a, b) => b[1] - a[1])[0][0]).slice(0, 60);
+    const x = { kind: g.income ? 'income' : 'fixed', name, cat: g.cat, who: g.who, amount, day: clamp(Math.round(median(g.days)), 1, 31), auto: false };
+    if (amount > 0 && !known(x)) out.push(x);
+  }
+  for (const r of Object.values(recurringItems())) {
+    if (!r.active || r.every !== 'monthly') continue;
+    const t = r.tpl, x = { kind: t.type === 'income' ? 'income' : 'fixed', name: String(t.note || '').slice(0, 60) || catById(t.cat, t.type).name, cat: t.cat, who: whoOf(t), amount: round2(+t.amount || 0), day: clamp(r.day || 1, 1, 31), auto: false };
+    if (x.amount > 0 && !known(x)) out.push(x);
+  }
+  out.sort((a, b) => (a.kind === b.kind ? b.amount - a.amount : a.kind === 'income' ? -1 : 1));
+  const incomeSum = sum(plan.incomes, x => x.amount) + sum(out.filter(x => x.kind === 'income'), x => x.amount);
+  return { items: out.slice(0, 16), save: !plan.save && incomeSum > 0 ? niceRound(incomeSum * 0.2) : 0 };
+}
+function openPlanSuggest() {
+  PS = planSuggestions();
+  const solo = household().solo;
+  const row = (x, i) => '<label class="list-row" style="cursor:pointer"><span style="display:flex;gap:10px;align-items:center;min-width:0"><input type="checkbox" data-ps="' + i + '" checked style="width:18px;height:18px;accent-color:var(--accent);flex:none">' + (solo ? '' : avatarHTML(x.who, 'xs')) +
+    '<span style="min-width:0"><span class="t" style="display:block">' + esc(catById(x.cat, x.kind === 'income' ? 'income' : 'expense').emoji + '  ' + x.name) + '</span><span class="m">' + esc((solo ? '' : memberName(x.who) + ' · ') + 'around the ' + ordinal(x.day)) + '</span></span></span><b>' + esc(money(x.amount)) + '</b></label>';
+  const inc = PS.items.map((x, i) => [x, i]).filter(p => p[0].kind === 'income'), fix = PS.items.map((x, i) => [x, i]).filter(p => p[0].kind === 'fixed');
+  let h = '<p class="sh-lede">Here is what repeats in your entries. Untick anything that isn’t a monthly regular, and change the rest any time.</p>';
+  if (inc.length) h += '<p class="lbl-s" style="margin-top:16px">Money in</p>' + inc.map(p => row(p[0], p[1])).join('');
+  if (fix.length) h += '<p class="lbl-s" style="margin-top:16px">Fixed costs</p>' + fix.map(p => row(p[0], p[1])).join('');
+  if (PS.save) h += '<p class="lbl-s" style="margin-top:16px">Saving goal</p><label class="list-row" style="cursor:pointer"><span style="display:flex;gap:10px;align-items:center"><input type="checkbox" data-ps="save" checked style="width:18px;height:18px;accent-color:var(--accent)">A fifth of what comes in</span><b>' + esc(money(PS.save)) + '</b></label>';
+  const any = PS.items.length || PS.save;
+  if (!any) h += '<p class="note-box">Nothing repeats often enough yet. Add your income and fixed costs yourself, or come back after a month of entries.</p>';
+  openSheet(sheetHead('Fill in the plan') + '<div class="sh-body">' + h + '</div><footer class="sh-foot"><span class="spacer"></span><button type="button" class="btn" data-act="close-sheet">' + (any ? 'Cancel' : 'Close') + '</button>' + (any ? '<button type="button" class="btn primary" data-act="ps-apply">Add to plan</button>' : '') + '</footer>', { label: 'Fill in the plan' });
+}
+async function planSuggestApply() {
+  const p = planRaw();
+  for (const el of $$('[data-ps]')) {
+    if (!el.checked) continue;
+    if (el.dataset.ps === 'save') { p.save = PS.save; continue; }
+    const x = PS.items[+el.dataset.ps];
+    if (x) (x.kind === 'income' ? p.incomes : p.fixed).push(Object.assign({ id: uid(x.kind === 'income' ? 'i' : 'f') }, x));
+  }
+  p.sample = false;
+  closeSheet();
+  try { await savePlan(p); toast('Plan filled in. Tap any line to fine-tune it.'); } catch (e) { toast(storeErrorText(e)); }
 }

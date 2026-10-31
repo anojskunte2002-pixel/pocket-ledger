@@ -1,12 +1,12 @@
 {
   "name": "Pocket Ledger",
   "short_name": "Ledger",
-  "description": "Track money by just saying it. Type or speak expenses in plain words, import bank messages and statements, and get budgets and insights. Your entries stay on your device.",
+  "description": "Track money by just saying it, alone or as a couple. Type or speak entries in plain words, plan the month around rent, EMIs and money sent home, and see what is safe to spend. Your entries stay on your device.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#eef2ee",
-  "theme_color": "#eef2ee",
+  "background_color": "#02050f",
+  "theme_color": "#0a1f3d",
   "icons": [
     {
       "src": "icons/icon-192.png",
@@ -31,8 +31,8 @@
       "url": "./#insights"
     },
     {
-      "name": "Budgets",
-      "url": "./#budgets"
+      "name": "Plan",
+      "url": "./#plan"
     }
   ]
 }

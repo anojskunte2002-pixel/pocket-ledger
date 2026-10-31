@@ -212,3 +212,88 @@ function bindHeatmap(root, A) {
   grid.addEventListener('focusin', ev => { const t = ev.target.closest('.hm-c'); if (t) { const r = t.getBoundingClientRect(); show(t, r.left + r.width / 2, r.top); } });
   grid.addEventListener('focusout', hideTip);
 }
+
+/* the month's plan as a flow: every income pours into one pool, which fans out into
+   fixed costs, the saving goal and everyday money (a shortfall joins on the left if plans exceed income) */
+let FLOW_N = 0;
+function flowChart(el, A) {
+  const P = A.plan;
+  const solo = household().solo;
+  const pc = w => (solo ? 'var(--series-3)' : 'var(--' + (w === 'p2' ? 'p2' : w === 'joint' ? 'pj' : 'p1') + ')');
+  const left = P && P.incomes.length ? P.incomes.map(r => ({ name: r.name, sub: solo ? '' : memberName(r.who), v: r.amount, color: pc(r.who), tip: [] }))
+    : (P && P.incomeActual > 0 ? [{ name: 'Income so far', sub: '', v: P.incomeActual, color: 'var(--series-3)', tip: [] }] : []);
+  if (!P || !left.length) { el.innerHTML = '<p class="muted">Add what comes in each month to see where it goes.</p>'; return; }
+  const groups = new Map();
+  for (const r of P.fixed) {
+    const g = groups.get(r.cat) || { cat: r.cat, v: 0, items: [] };
+    g.v += r.amount; g.items.push(r); groups.set(r.cat, g);
+  }
+  let gl = Array.from(groups.values()).sort((a, b) => b.v - a.v);
+  const base = Math.max(sum(left, l => l.v), P.fixedTotal + P.save + Math.max(0, P.flexible), 1);
+  const small = gl.filter(g => g.v < base * 0.045);
+  if (small.length > 1) { gl = gl.filter(g => small.indexOf(g) < 0); gl.push({ cat: '', v: sum(small, g => g.v), items: [].concat(...small.map(g => g.items)), other: true }); }
+  const right = gl.map(g => ({
+    name: g.other ? 'Other fixed' : g.items.length === 1 ? g.items[0].name : catById(g.cat).name,
+    sub: g.items.length > 1 ? plural(g.items.length, 'item') : '',
+    v: g.v, color: !g.other && catById(g.cat).group === 'savings' ? 'var(--ring3)' : 'var(--ring2)',
+    tip: g.items.map(r => ({ label: r.name + (solo ? '' : ' · ' + memberName(r.who)), value: moneyR(r.amount) }))
+  }));
+  if (P.save > 0) right.push({ name: 'Saving goal', sub: '', v: P.save, color: 'var(--ring3)', tip: [] });
+  if (P.flexible > 0) right.push({ name: 'Everyday', sub: 'safe to spend', v: P.flexible, color: 'var(--ring1)', tip: [] });
+  if (P.flexible < 0) left.push({ name: 'Shortfall', sub: 'plans exceed income', v: -P.flexible, color: 'var(--bad)', tip: [], short: true });
+
+  // every node gets a slot tall enough for its two-line label; the bar sits in the middle of its slot
+  const W = chartWidth(el), narrow = W < 460;
+  const labW = narrow ? 94 : 136, barW = 9, poolW = 6, gap = 7, padT = 30, padB = 6, slotMin = 25;
+  const total = Math.max(sum(left, n => n.v), sum(right, n => n.v));
+  const k = (narrow ? 230 : 260) / total, poolH = total * k;
+  const sideH = nodes => sum(nodes, n => Math.max(n.v * k, slotMin)) + gap * (nodes.length - 1);
+  const inner = Math.max(poolH, sideH(left), sideH(right)), H = Math.round(inner + padT + padB);
+  const xL = labW, xR = W - labW - barW, xP = Math.round((xL + barW + xR) / 2 - poolW / 2);
+  const place = nodes => {
+    let y = padT + (inner - sideH(nodes)) / 2, acc = 0;
+    for (const n of nodes) { const s = Math.max(n.v * k, slotMin); n.h = Math.max(2, n.v * k); n.y = y + (s - n.h) / 2; n.ly = y + s / 2; n.p0 = acc; acc += n.v; y += s + gap; }
+  };
+  place(left); place(right);
+  const poolY = padT + (inner - poolH) / 2;
+  const uid = 'fl' + (++FLOW_N);
+  const band = (x0, a0, b0, x1, a1, b1) => { const xm = f1((x0 + x1) / 2); return 'M' + f1(x0) + ',' + f1(a0) + 'C' + xm + ',' + f1(a0) + ' ' + xm + ',' + f1(a1) + ' ' + f1(x1) + ',' + f1(a1) + 'L' + f1(x1) + ',' + f1(b1) + 'C' + xm + ',' + f1(b1) + ' ' + xm + ',' + f1(b0) + ' ' + f1(x0) + ',' + f1(b0) + 'Z'; };
+  const tips = [];
+  let defs = '<defs>', links = '', nodes = '', labels = '';
+  const ribbon = (n, side, i) => {
+    const gid = uid + side + i, y0 = poolY + n.p0 * k, hh = n.v * k;
+    const fromX = side === 'L' ? xL + barW : xP + poolW, toX = side === 'L' ? xP : xR;
+    defs += '<linearGradient id="' + gid + '" gradientUnits="userSpaceOnUse" x1="' + f1(fromX) + '" x2="' + f1(toX) + '" y1="0" y2="0">' +
+      '<stop offset="0" style="stop-color:' + (side === 'L' ? n.color : 'var(--ink)') + ';stop-opacity:' + (side === 'L' ? '.5' : '.1') + '"/>' +
+      '<stop offset="1" style="stop-color:' + (side === 'L' ? 'var(--ink)' : n.color) + ';stop-opacity:' + (side === 'L' ? '.1' : '.5') + '"/></linearGradient>';
+    const d = side === 'L' ? band(fromX, n.y, n.y + hh, toX, y0, y0 + hh) : band(fromX, y0, y0 + hh, toX, n.y, n.y + hh);
+    tips.push(n);
+    links += '<path class="fl-link" data-t="' + (tips.length - 1) + '" d="' + d + '" fill="url(#' + gid + ')"/>';
+    const x = side === 'L' ? xL : xR;
+    nodes += '<rect class="fl-node" data-t="' + (tips.length - 1) + '" x="' + f1(x) + '" y="' + f1(n.y) + '" width="' + barW + '" height="' + f1(n.h) + '" rx="3" style="fill:' + n.color + '"/>';
+    const lx = side === 'L' ? xL - 8 : xR + barW + 8, anchor = side === 'L' ? 'end' : 'start';
+    const maxCh = Math.floor((labW - 12) / 6.6), full = compact(n.v) + (n.sub ? ' · ' + n.sub : '');
+    const nm = n.name.length > maxCh ? n.name.slice(0, maxCh - 1) + '…' : n.name;
+    labels += '<text class="fl-name" x="' + f1(lx) + '" y="' + f1(n.ly - 2) + '" text-anchor="' + anchor + '">' + esc(nm) + '</text>' +
+      '<text class="fl-amt" x="' + f1(lx) + '" y="' + f1(n.ly + 12) + '" text-anchor="' + anchor + '">' + esc(full.length <= Math.floor((labW - 10) / 6) ? full : compact(n.v)) + '</text>';
+  };
+  left.forEach((n, i) => ribbon(n, 'L', i));
+  right.forEach((n, i) => ribbon(n, 'R', i));
+  defs += '</defs>';
+  const inTotal = sum(left.filter(n => !n.short), n => n.v);
+  const cap = '<text class="fl-cap" x="' + f1(xP + poolW / 2) + '" y="' + f1(Math.max(12, poolY - 10)) + '" text-anchor="middle">' + esc(compact(inTotal)) + ' in</text>';
+  const label = 'Coming in ' + money(inTotal) + ': ' + left.map(n => n.name + (n.sub ? ' (' + n.sub + ')' : '') + ' ' + money(n.v)).join(', ') + '. Going to: ' + right.map(n => n.name + ' ' + money(n.v)).join(', ') + '.';
+  el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" role="img" aria-label="' + esc(label) + '">' + defs + links +
+    '<rect class="fl-pool" x="' + xP + '" y="' + f1(poolY) + '" width="' + poolW + '" height="' + f1(total * k) + '" rx="3"/>' + nodes + labels + cap + '</svg>';
+  const svg = el.querySelector('svg');
+  const paths = Array.from(svg.querySelectorAll('.fl-link'));
+  const show = (ev, i) => {
+    const n = tips[i];
+    paths.forEach(p => p.classList.toggle('dim', p.getAttribute('data-t') !== String(i)));
+    const rows = [{ label: pct(n.v / Math.max(1, inTotal)) + ' of what comes in', value: money(n.v), color: n.color }].concat(n.tip.slice(0, 6));
+    showTip(ev.clientX, ev.clientY, n.name + (n.sub && n.tip.length === 0 ? ' · ' + n.sub : ''), rows);
+  };
+  svg.addEventListener('pointermove', ev => { const t = ev.target.closest('[data-t]'); if (t) show(ev, +t.getAttribute('data-t')); else { paths.forEach(p => p.classList.remove('dim')); hideTip(); } });
+  svg.addEventListener('pointerdown', ev => { const t = ev.target.closest('[data-t]'); if (t) show(ev, +t.getAttribute('data-t')); });
+  svg.addEventListener('pointerleave', () => { paths.forEach(p => p.classList.remove('dim')); hideTip(); });
+}

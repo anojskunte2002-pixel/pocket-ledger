@@ -1,15 +1,17 @@
 /* ===================== store: private cloud (db capability) or this device ===================== */
 const LS_PREFIX = 'pocketledger:v1:';
 const BUCKET_LIMIT = 200000;      // bytes; a month document stays below the 256 KiB cap
-const META_NAMES = ['settings', 'budgets', 'categories', 'rules', 'recurring'];
+const META_NAMES = ['settings', 'budgets', 'categories', 'rules', 'recurring', 'household', 'plan'];
 
 const Store = {
   mode: 'loading',                 // cloud | device | memory
   reason: '',                      // why we are not in the cloud
   db: null,
+  uid: null,
+  isOwner: true,
   buckets: new Map(),              // bucketId → { entries: { id: doc | null } }
   sizes: new Map(),
-  meta: { settings: null, budgets: null, categories: null, rules: null, recurring: null },
+  meta: { settings: null, budgets: null, categories: null, rules: null, recurring: null, household: null, plan: null },
   metaPending: {},
   entries: new Map(),
   where: new Map(),
@@ -37,13 +39,16 @@ function normEntry(id, e) {
     tags: Array.isArray(e.tags) ? e.tags.slice(0, 8).map(String) : [],
     source: String(e.source || 'text'),
     rec: e.rec ? String(e.rec) : '',
+    who: e.who ? String(e.who).slice(0, 20) : '',
+    by: e.by ? String(e.by).slice(0, 20) : '',
+    plan: e.plan ? String(e.plan).slice(0, 40) : '',
     sample: !!e.sample,
     created: +e.created || 0,
     updated: +e.updated || +e.created || 0
   };
 }
 function entryToDoc(e) {
-  return { type: e.type, amount: e.amount, cat: e.cat, date: e.date, note: e.note, merchant: e.merchant, method: e.method, tags: e.tags, source: e.source, rec: e.rec, sample: e.sample, created: e.created, updated: e.updated };
+  return { type: e.type, amount: e.amount, cat: e.cat, date: e.date, note: e.note, merchant: e.merchant, method: e.method, tags: e.tags, source: e.source, rec: e.rec, who: e.who, by: e.by, plan: e.plan, sample: e.sample, created: e.created, updated: e.updated };
 }
 
 function storeOnChange(fn) { Store.listeners.add(fn); }
@@ -109,14 +114,20 @@ async function initStore() {
   if (db) {
     let owner = true;
     if (user && typeof user.isOwner === 'function') owner = await user.isOwner().catch(() => true);
-    if (owner) {
+    if (user && typeof user.id === 'function') Store.uid = await user.id().catch(() => null);
+    Store.isOwner = owner;
+    let canWrite = null;
+    if (!owner && user && typeof user.can === 'function') canWrite = await user.can('data.write').catch(() => null);
+    if (!owner && canWrite !== true && user && typeof user.canEdit === 'function') canWrite = (await user.canEdit().catch(() => false)) === true ? true : canWrite;
+    const probe = owner || canWrite === true ? true : await db.doc('meta/household').get().then(sn => sn.exists, () => false);
+    if (owner || probe) {
       Store.db = db; Store.mode = 'cloud';
       const ok = await subscribeCloud(db);
       if (!ok && !Store.ready) { Store.error = 'Still connecting to your saved ledger…'; }
       Store.ready = true; rebuildEntries(); storeEmit();
       return;
     }
-    Store.reason = 'not-owner';
+    Store.reason = 'no-access';
   } else Store.reason = c ? 'signed-out' : 'standalone';
   if (lsWorks()) { Store.mode = 'device'; loadDevice(); window.addEventListener('storage', ev => { if (ev.key && ev.key.indexOf(LS_PREFIX) === 0) { loadDevice(); storeEmit(); } }); }
   else Store.mode = 'memory';
@@ -283,7 +294,36 @@ async function wipeAll() {
     for (const k of lsKeys()) lsDel(k);
   }
   Store.buckets = new Map(); Store.sizes = new Map(); Store.pending.clear(); Store.metaPending = {};
-  Store.meta = { settings: null, budgets: null, categories: null, rules: null, recurring: null };
+  Store.meta = { settings: null, budgets: null, categories: null, rules: null, recurring: null, household: null, plan: null };
   Store.metaLoaded = Store.mode !== 'cloud';
   rebuildEntries(); storeEmit();
+}
+
+/* ---------- per-person preferences: which member you are, your background ---------- */
+const Prefs = { me: '', scene: '', motion: true, fx: 'full', loaded: false };
+function sanitizePrefs(p) {
+  const out = {};
+  if (!p || typeof p !== 'object') return out;
+  if (typeof p.me === 'string' && /^(?:p1|p2)$/.test(p.me)) out.me = p.me;
+  if (typeof p.scene === 'string' && /^[a-z]{2,20}$/.test(p.scene)) out.scene = p.scene;
+  if (typeof p.motion === 'boolean') out.motion = p.motion;
+  if (p.fx === 'full' || p.fx === 'frosted' || p.fx === 'saver') out.fx = p.fx;
+  return out;
+}
+function loadLocalPrefs() { Object.assign(Prefs, sanitizePrefs(lsGet('prefs'))); }
+async function loadCloudPrefs() {
+  if (Store.mode !== 'cloud' || !Store.uid || !Store.db) return false;
+  try {
+    const snap = await Store.db.doc('data/users/' + Store.uid + '/prefs').get();
+    if (snap.exists) { Object.assign(Prefs, sanitizePrefs(snap.data())); lsSet('prefs', sanitizePrefs(Prefs)); return true; }
+  } catch (e) { /* the device copy is enough */ }
+  return false;
+}
+async function savePrefs(patch) {
+  Object.assign(Prefs, sanitizePrefs(patch));
+  const clean = sanitizePrefs(Prefs);
+  lsSet('prefs', clean);
+  if (Store.mode === 'cloud' && Store.uid && Store.db) {
+    try { await enqueue('prefs', () => Store.db.doc('data/users/' + Store.uid + '/prefs').set(clean)); } catch (e) { /* kept on this device */ }
+  }
 }

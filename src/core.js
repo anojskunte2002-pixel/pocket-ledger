@@ -116,12 +116,13 @@ function curSymbol() {
 }
 function compactNum(v) {
   const t = x => (x >= 100 ? String(Math.round(x)) : String(Math.round(x * 10) / 10));
+  const t2 = x => (x < 10 ? String(Math.round(x * 100) / 100) : t(x));
   if (FMT.cur === 'INR') {
-    if (v >= 1e7) return t(v / 1e7) + 'Cr';
-    if (v >= 1e5) return t(v / 1e5) + 'L';
+    if (v >= 1e7) return t2(v / 1e7) + 'Cr';
+    if (v >= 1e5) return t2(v / 1e5) + 'L';
   } else {
-    if (v >= 1e9) return t(v / 1e9) + 'B';
-    if (v >= 1e6) return t(v / 1e6) + 'M';
+    if (v >= 1e9) return t2(v / 1e9) + 'B';
+    if (v >= 1e6) return t2(v / 1e6) + 'M';
   }
   if (v >= 1e3) return t(v / 1e3) + 'K';
   return String(Math.round(v));
@@ -150,6 +151,7 @@ const DEFAULT_CATS = [
   { id: 'shopping', name: 'Shopping', emoji: '🛍️', type: 'expense', group: 'wants' },
   { id: 'bills', name: 'Bills & Utilities', emoji: '💡', type: 'expense', group: 'needs' },
   { id: 'home', name: 'Rent & Home', emoji: '🏠', type: 'expense', group: 'needs' },
+  { id: 'sendhome', name: 'Sending home', emoji: '🏡', type: 'expense', group: 'needs' },
   { id: 'health', name: 'Health & Fitness', emoji: '💊', type: 'expense', group: 'needs' },
   { id: 'fun', name: 'Entertainment', emoji: '🎬', type: 'expense', group: 'wants' },
   { id: 'subs', name: 'Subscriptions', emoji: '🔁', type: 'expense', group: 'wants' },
@@ -165,8 +167,10 @@ const DEFAULT_CATS = [
   { id: 'transfer', name: 'Card Bills & Transfers', emoji: '🔄', type: 'expense', group: 'transfer' },
   { id: 'other', name: 'Other', emoji: '📦', type: 'expense', group: 'wants' },
   { id: 'salary', name: 'Salary', emoji: '💼', type: 'income', group: 'income' },
+  { id: 'bonus', name: 'Bonus & Incentives', emoji: '🎉', type: 'income', group: 'income' },
   { id: 'business', name: 'Business & Freelance', emoji: '💻', type: 'income', group: 'income' },
   { id: 'returns', name: 'Interest & Dividends', emoji: '🌱', type: 'income', group: 'income' },
+  { id: 'rental', name: 'Rental Income', emoji: '🏘️', type: 'income', group: 'income' },
   { id: 'refund', name: 'Refunds & Cashback', emoji: '↩️', type: 'income', group: 'income' },
   { id: 'gift_in', name: 'Gifts Received', emoji: '🎀', type: 'income', group: 'income' },
   { id: 'other_in', name: 'Other Income', emoji: '💰', type: 'income', group: 'income' }
@@ -200,8 +204,9 @@ const KW = {
     '!Udemy', '!Coursera', '!edX', "!BYJU'S", '!Byjus', '!Unacademy', '!upGrad', '!Skillshare', '!MasterClass', '!Kindle', '!Physics Wallah', '!Vedantu', '!Chegg', '!Khan Academy'],
   care: ['salon', 'haircut', 'hair cut', 'hair', 'barber', 'spa', 'massage', 'facial', 'manicure', 'pedicure', 'waxing', 'threading', 'grooming', 'parlour', 'parlor', 'beauty parlour', 'beauty', 'cosmetics', 'makeup', 'make up', 'skincare', 'skin care', 'sunscreen', 'moisturizer', 'shampoo', 'conditioner', 'perfume', 'deodorant', 'deo', 'razor', 'trimmer', 'soap', 'toothpaste', 'toiletries', 'sanitary', 'pads', '~trim',
     '!Nykaa', '!Sephora', '!Lakme', '!Naturals Salon', '!Green Trends', '!Bodycraft', '!Toni & Guy', '!Ulta', '!The Body Shop', '!Mamaearth', '!Purplle'],
-  family: ['kids', 'kid', 'child', 'children', 'baby', 'babies', 'diapers', 'diaper', 'nappies', 'toys', 'toy', 'daycare', 'day care', 'creche', 'babysitter', 'nanny', 'school supplies', 'school uniform', 'uniform', '~parents', '~mom', '~mum', '~dad', '~father', '~mother', '~family', '~in-laws', '~pocket money', '~allowance', 'money to parents', 'sent home',
+  family: ['kids', 'kid', 'child', 'children', 'baby', 'babies', 'diapers', 'diaper', 'nappies', 'toys', 'toy', 'daycare', 'day care', 'creche', 'babysitter', 'nanny', 'school supplies', 'school uniform', 'uniform', '~mom', '~mum', '~dad', '~father', '~mother', '~family', '~in-laws', '~pocket money', '~allowance',
     '!FirstCry', '!Hamleys'],
+  sendhome: ['sending home', 'send home', 'sent home', 'home money', 'money home', 'money to parents', 'money to mom', 'money to dad', 'to parents', 'for parents', 'family support', 'parents support', 'remittance', 'remit', '~parents', '~amma', '~appa', '~aai', '~papa', '~mummy', '!Western Union', '!Remitly'],
   gifts: ['gift', 'gifts', 'present', 'presents', 'donation', 'donations', 'donate', 'donated', 'charity', 'ngo', 'temple', 'church', 'mosque', 'gurudwara', 'gurdwara', 'offering', 'tithe', 'puja', 'pooja', 'wedding gift', 'birthday gift', 'shagun', 'contribution', 'fundraiser', 'crowdfunding', 'bouquet', 'greeting card', '~flowers',
     '!Ketto', '!Milaap', '!GoFundMe', '!GiveIndia'],
   emi: ['emi', 'emis', 'loan', 'loan emi', 'loan repayment', 'loan payment', 'home loan', 'car loan', 'personal loan', 'education loan', 'bike loan', 'gold loan', 'student loan', 'repayment', 'installment', 'instalment', 'loan interest', '~interest', 'bnpl',
@@ -213,12 +218,14 @@ const KW = {
     '!Zerodha', '!Groww', '!Upstox', '!Angel One', '!Kuvera', '!Smallcase', '!INDmoney', '!Paytm Money', '!ET Money', '!Coinbase', '!WazirX', '!Binance', '!CoinDCX', '!Robinhood', '!Vanguard', '!Fidelity', '!Schwab', '!Wealthsimple', '!Trading 212', '!Freetrade'],
   transfer: ['credit card bill', 'cc bill', 'card bill', 'credit card payment', 'cc payment', 'credit card due', 'card dues', 'self transfer', 'own account', 'to savings account', 'transfer to savings', 'moved to savings', 'sent to savings', 'atm', 'atm withdrawal', 'cash withdrawal', 'withdrew', 'withdrawal', 'withdraw', 'wallet top up', 'wallet topup', 'wallet top-up', 'top up', 'topup', 'top-up', 'add money', 'added money', 'lent', 'lend', 'loaned', 'paid back', 'settle up', 'settled up', '!Splitwise', '~transfer', '~transferred'],
   other: ['~misc', '~miscellaneous', '~others', '~random', '~stuff'],
-  salary: ['salary', 'salaries', 'salery', 'paycheck', 'pay check', 'paycheque', 'payslip', 'payroll', 'wages', 'wage', 'stipend', 'pension', 'bonus', 'incentive', 'incentives', 'increment', 'arrears', 'overtime', '~pay'],
+  salary: ['salary', 'salaries', 'salery', 'paycheck', 'pay check', 'paycheque', 'payslip', 'payroll', 'wages', 'wage', 'stipend', 'pension', 'increment', 'arrears', 'overtime', '~pay'],
+  bonus: ['bonus', 'bonuses', 'incentive', 'incentives', 'performance bonus', 'joining bonus', 'diwali bonus', 'festival bonus', 'variable pay', 'esop', 'esops', 'rsu', 'rsus'],
   business: ['freelance', 'freelancing', 'client', 'client payment', 'invoice', 'invoices', 'consulting', 'consultancy', 'project payment', '~project', 'gig', 'side hustle', 'business', 'sales', 'revenue', 'commission', 'fees received', 'professional fees', 'royalty', 'royalties', 'youtube income', 'affiliate', 'tuition income', 'teaching', '!Upwork', '!Fiverr', '!Toptal', '!AdSense', '~payment', '~work'],
   returns: ['interest', 'fd interest', 'savings interest', 'interest credited', 'dividend', 'dividends', 'capital gains', 'profit', 'profits', 'stock profit', 'returns', '~return', 'maturity', 'redemption', 'coupon', 'yield'],
   refund: ['refund', 'refunded', 'refunds', 'cashback', 'cash back', 'reimbursement', 'reimbursed', 'reimburse', 'insurance claim', '~claim', 'reversal', 'reversed', 'chargeback', 'money back'],
   gift_in: ['gift', 'gifted', 'gifts', 'birthday money', 'shagun', 'gift from', 'from mom', 'from dad', 'from parents', 'from grandma', 'from grandpa', 'blessing'],
-  other_in: ['rental income', 'rent received', 'rent from tenant', 'tenant', 'sold', 'resale', 'lottery', 'prize', 'won', 'winnings', '~allowance', '~pocket money']
+  rental: ['rental income', 'rent received', 'rent from tenant', 'rent income', 'tenant', 'tenants', 'lease income', 'house rent received'],
+  other_in: ['sold', 'resale', 'lottery', 'prize', 'won', 'winnings', '~allowance', '~pocket money']
 };
 
 /* Normalize free text for keyword matching. */

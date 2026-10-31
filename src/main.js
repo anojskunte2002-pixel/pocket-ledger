@@ -23,6 +23,52 @@ const ACT = {
   'open-import': () => openImport('sms'),
   'new-entry': () => openEditor(null),
   'new-repeat': () => openEditor({ repeat: 'monthly' }),
+  person: a => setPerson(a),
+  household: () => openHousehold(),
+  'hh-two': a => { if (!HH) return; HH.two = a === '1'; if (!HH.two) HH.me = 'p1'; renderHousehold(); },
+  'hh-me': a => { if (!HH) return; HH.me = a; setPicked('[data-act="hh-me"]', a); },
+  'hh-save': () => householdSave(),
+  appearance: () => openAppearance(),
+  scene: a => { if (!sceneById(a)) return; savePrefs({ scene: a }); applyLook(); setPicked('.scene-tile', a, 'aria-pressed'); },
+  fx: a => { savePrefs({ fx: a }); applyLook(); setPicked('[data-act="fx"]', a); },
+  'tab-plan': () => { closeSheet(true); setTab('plan'); },
+  'plan-item': a => openPlanItem(a),
+  'plan-pay': a => planPay(a),
+  'plan-edit': a => openPlanEditor('', a),
+  'plan-new': a => openPlanEditor(a === 'income' ? 'income' : 'fixed'),
+  'plan-new-fixed': () => openPlanEditor('fixed'),
+  'plan-quick': a => { const p = String(a).split(':'); openPlanEditor(p[0] === 'income' ? 'income' : 'fixed', '', { cat: p[1] || '', name: p.slice(2).join(':') }); },
+  'plan-goal': () => openGoalEditor(),
+  'plan-suggest': () => openPlanSuggest(),
+  'pe-cat': a => {
+    if (!PE) return;
+    PE.d.cat = a;
+    setPicked('#pe-cats .cat-opt', a, 'aria-pressed');
+    if (!PE.whoTouched && PE.d.kind === 'fixed' && !household().solo) { PE.d.who = SHARED_CATS.has(a) ? 'joint' : meId(); setPicked('[data-act="pe-who"]', PE.d.who); }
+    const n = $('#pe-name'); if (n && !n.value.trim()) n.placeholder = catById(a).name;
+  },
+  'pe-who': a => { if (!PE) return; PE.d.who = a; PE.whoTouched = true; setPicked('[data-act="pe-who"]', a); },
+  'pe-save': () => planEditorSave(),
+  'pe-delete': async () => {
+    if (!PE) return;
+    const d = PE.d;
+    closeSheet();
+    try { await removePlanItem(d.id); } catch (e) { toast(storeErrorText(e)); return; }
+    toast('Removed ' + d.name + ' from the plan', [{ label: 'Undo', run: () => upsertPlanItem(d).catch(err => toast(storeErrorText(err))) }], 6500);
+  },
+  'goal-pick': a => { const i = $('#goal-amt'); if (i) { i.value = a; i.focus(); } },
+  'goal-save': () => goalSave(),
+  'goal-remove': async () => { closeSheet(); try { await setPlanSave(0); toast('Saving goal removed'); } catch (e) { toast(storeErrorText(e)); } },
+  'ps-apply': () => planSuggestApply(),
+  'slip-who': a => {
+    const i = +a, d = currentSlip(i);
+    if (!d) return;
+    const order = ['p1', 'p2', 'joint'], next = order[(order.indexOf(draftWho(d)) + 1) % 3];
+    UI.slipOver[i] = Object.assign({}, UI.slipOver[i], { who: next });
+    renderSlips();
+    $('#entry').focus();
+  },
+  'ed-who': a => { if (!ED) return; ED.d.who = a; ED.whoTouched = true; setPicked('[data-act="ed-who"]', a); },
   'slip-cat': a => {
     const i = +a, d = currentSlip(i);
     if (!d) return;
@@ -54,7 +100,12 @@ const ACT = {
     for (const b of $$('[data-act="ed-type"]')) b.setAttribute('aria-checked', String(b.dataset.arg === a));
     $('#ed-cats').innerHTML = catGridHTML(a, ED.d.cat);
   },
-  'ed-cat': a => { if (!ED) return; ED.d.cat = a; ED.catTouched = true; for (const b of $$('#ed-cats .cat-opt')) b.setAttribute('aria-pressed', String(b.dataset.arg === a)); },
+  'ed-cat': a => {
+    if (!ED) return;
+    ED.d.cat = a; ED.catTouched = true;
+    setPicked('#ed-cats .cat-opt', a, 'aria-pressed');
+    if (ED.isNew && !ED.whoTouched && !household().solo) { ED.d.who = defaultWhoFor(a); setPicked('[data-act="ed-who"]', ED.d.who); }
+  },
   'ed-method': a => { if (!ED) return; ED.d.method = ED.d.method === a ? '' : a; for (const b of $$('#ed-methods .chip-btn')) b.setAttribute('aria-pressed', String(b.dataset.arg === ED.d.method)); },
   'ed-repeat': a => { if (!ED) return; ED.d.repeat = a; for (const b of $$('#ed-repeat .chip-btn')) b.setAttribute('aria-pressed', String(b.dataset.arg === a)); },
   'ed-save': () => editorSave(),
@@ -134,10 +185,8 @@ function onKey(ev) {
 function rotatePlaceholder() {
   const el = $('#entry');
   let i = 0;
-  const set = () => { const ex = exampleTry(); el.placeholder = 'Try “' + ex[i % ex.length] + '”'; i++; };
-  set();
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (!reduce) setInterval(() => { if (!el.value && document.activeElement !== el && !document.hidden) set(); }, 4500);
+  if (!reduce) setInterval(() => { if (UI.capOpen && !el.value && document.activeElement !== el && !document.hidden) { const ex = exampleTry(); el.placeholder = 'Try “' + ex[++i % ex.length] + '”'; } }, 4500);
 }
 function bindChrome() {
   document.addEventListener('click', ev => {
@@ -149,6 +198,19 @@ function bindChrome() {
     fn(t.dataset.arg != null ? t.dataset.arg : '', t, ev);
   });
   for (const b of $$('.tabs [data-tab]')) b.addEventListener('click', () => setTab(b.dataset.tab));
+  const top = $('#top');
+  const onScroll = () => { const s = window.scrollY > 6; if (top.classList.contains('scrolled') !== s) { top.classList.toggle('scrolled', s); } };
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+  if (window.matchMedia && window.matchMedia('(hover: hover)').matches) {
+    document.addEventListener('pointermove', ev => {
+      const g = ev.target && ev.target.closest && ev.target.closest('button.glass, .hero');
+      if (!g) return;
+      const r = g.getBoundingClientRect();
+      g.style.setProperty('--mx', Math.round(ev.clientX - r.left) + 'px');
+      g.style.setProperty('--my', Math.round(ev.clientY - r.top) + 'px');
+    }, { passive: true });
+  }
   $('#prev-period').addEventListener('click', () => shiftPeriod(-1));
   $('#next-period').addEventListener('click', () => shiftPeriod(1));
   $('#period-label').addEventListener('click', () => { UI.period = currentKey(); UI.periodTouched = false; render(); });
@@ -160,9 +222,11 @@ function bindChrome() {
   entry.addEventListener('input', onEntryInput);
   entry.addEventListener('keydown', ev => {
     if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); submitEntry(); }
-    else if (ev.key === 'Escape' && UI.aiCtl) UI.aiCtl.abort();
+    else if (ev.key === 'Escape') { if (UI.aiCtl) UI.aiCtl.abort(); else if (!entry.value.trim()) entry.blur(); }
   });
   entry.addEventListener('paste', onPaste);
+  entry.addEventListener('focus', () => setCapOpen(true));
+  entry.addEventListener('blur', () => setTimeout(maybeCloseCap, 160));
   document.addEventListener('paste', ev => {
     const tag = (ev.target && ev.target.tagName) || '';
     if (/^(INPUT|TEXTAREA)$/.test(tag) || SHEET.open) return;
@@ -185,8 +249,8 @@ function bindChrome() {
   document.addEventListener('keydown', onKey);
   window.addEventListener('beforeinstallprompt', ev => { ev.preventDefault(); INSTALL_EVT = ev; });
   window.addEventListener('appinstalled', () => { INSTALL_EVT = null; });
-  window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (h && h !== UI.tab) setTab(h); });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && Store.ready) { materializeRecurring(); render(); } });
+  window.addEventListener('hashchange', () => { const h = tabFromHash(location.hash); if (h && h !== UI.tab) setTab(h); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && Store.ready) { materializeRecurring(); materializePlan(); render(); } });
   window.addEventListener('scroll', hideTip, { passive: true });
   document.addEventListener('pointerdown', ev => { if (!ev.target.closest('.chart, .hm')) hideTip(); });
   if (typeof ResizeObserver === 'function') {
@@ -194,25 +258,57 @@ function bindChrome() {
     const ro = new ResizeObserver(() => {
       updateDockHeight();
       const w = $('#view').clientWidth;
-      if (w !== lastW) { lastW = w; if (UI.mounted === 'insights' && Store.ready) { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => drawCharts(analyze(UI.period))); } }
+      if (w !== lastW) {
+        lastW = w;
+        if (!Store.ready) return;
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(() => {
+          if (UI.mounted === 'insights') drawCharts(analyze(UI.period, UI.person));
+          for (const el of $$('#view .chart[data-chart="flow"]')) flowChart(el, analyze(UI.period, 'all'));
+          refractNow();
+        });
+      }
     });
     ro.observe($('#view'));
     ro.observe($('#dock'));
   }
 }
+const TABS = ['home', 'activity', 'plan', 'insights'];
+function tabFromHash(h) { h = String(h || '').replace(/^#/, ''); if (h === 'budgets') h = 'plan'; return TABS.indexOf(h) >= 0 ? h : ''; }
+/* your scene and glass, applied before anything else paints */
+function applyLook() {
+  applyScene(currentSceneId(), Prefs.motion && Prefs.fx !== 'saver');
+  initGlass(Prefs.fx);
+}
+async function settleMe() {
+  const before = currentSceneId(), fxBefore = Prefs.fx, motionBefore = Prefs.motion;
+  await loadCloudPrefs();
+  if (!Prefs.me && Store.mode === 'cloud') await savePrefs({ me: Store.isOwner ? 'p1' : 'p2' });
+  if (currentSceneId() !== before || Prefs.fx !== fxBefore || Prefs.motion !== motionBefore) applyLook();
+}
 function boot(hot) {
   hot = hot || {};
   setCurrency(settings().currency);
+  loadLocalPrefs();
+  applyScene(currentSceneId(), Prefs.motion && Prefs.fx !== 'saver');
+  if (bgInit() && BG.live) bgStart();
+  initGlass(Prefs.fx);
   bindChrome();
-  const h = (location.hash || '').slice(1);
-  UI.tab = ['home', 'activity', 'insights', 'budgets'].indexOf(h) >= 0 ? h : (['home', 'activity', 'insights', 'budgets'].indexOf(hot.tab) >= 0 ? hot.tab : 'home');
+  UI.tab = tabFromHash(location.hash) || tabFromHash(hot.tab) || 'home';
   if (hot.draft) $('#entry').value = String(hot.draft);
   rotatePlaceholder();
   autosize();
   syncDockButtons();
   storeOnChange(render);
   render();
-  initStore().then(() => { render(); materializeRecurring(); if ($('#entry').value) onEntryInput(); });
+  initStore().then(async () => {
+    render();
+    await settleMe();
+    render();
+    materializeRecurring();
+    materializePlan();
+    if ($('#entry').value) onEntryInput();
+  });
   initAI();
   const c = window.claude;
   if (c && typeof c.use === 'function') {
